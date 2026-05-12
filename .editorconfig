@@ -4,7 +4,7 @@ charset = utf-8
 spelling_error_severity= error
 
 #チェック対象を「識別子（変数名など）」とコメントに限定する
-spelling_checkable_types = identifier, comment
+spelling_checkable_types = identifiers, comments
 
 #辞書を英語（米国）に固定する
 spelling_languages=en-us

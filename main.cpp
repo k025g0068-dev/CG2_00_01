@@ -1,6 +1,27 @@
 #include <windows.h>
 #include <cstdint>
 #include <string>
+#include<filesystem>
+#include<fstream>
+#include<chrono>
+#include<d3d12.h>
+#include<dxgi1_6.h>
+#include<cassert>
+#pragma comment(lib,"d3d12.lib")
+#pragma comment(lib,"dxgi.lib")
+//現在時刻を取得
+std::chrono::system_clock::time_point now = std::chrono::system_clock::now();
+//ログファイルの名前にコンマ何秒入らないので、削って秒にする。
+std::chrono::time_point<std::chrono::system_clock, std::chrono::seconds>
+nowSeconds = std::chrono::time_point_cast<std::chrono::seconds>(now);
+//日本時間（PCの設定時間）に変換
+std::chrono::zoned_time localTime{ std::chrono::current_zone(), nowSeconds };
+//formatを使って年月日_時分秒の文字列に変換
+std::string dateString = std::format("{:%Y%m%d_%H%M%S}", localTime);
+//時刻を使ってファイル名を作成
+std::string logFilePath = std::string("log/") + dateString + ".log";
+//ファイルを作って書き込む準備
+std::ofstream logStream(logFilePath);
 std::wstring ConvertString(const std::string& str) {
 	if (str.empty()) {
 		return std::wstring();
@@ -33,6 +54,11 @@ void Log(const std::string& message) {
 	OutputDebugStringA(message.c_str());
 }
 
+void Log(std::ostream& os, const std::string& message) {
+	os << message << std::endl;
+	OutputDebugStringA(message.c_str());
+}
+
 LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 	//メッセージに応じてゲームの固有処理を行う
 	switch (msg) {
@@ -45,6 +71,15 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 	//標準のメッセージ処理を行う
 	return DefWindowProc(hwnd, msg, wparam, lparam);
 }
+
+
+
+////これから書き込むバックバッファのインデックスを取得
+//UINT BackBufferIndex = swapChain->GetCurrentBackBufferIndex();
+////描画先のRTV設定する
+//commandList->OMSetRenderTargets(1, &rtvHandles[BackBufferIndex], false,nullptr);
+
+
 
 // Windowsアプリケーションのエントリーポイント（main関数）
 int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
@@ -86,22 +121,68 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	ShowWindow(hwnd, SW_SHOW);
 
 	MSG msg{};
+	//ログのディレクトリに関する操作を行うライブラリ
+	std::filesystem::create_directory("logs");
+
+	//DXGIファクトリーの生成	
+	IDXGIFactory7* dxgiFactory = nullptr;
+	//HRESULTはエラーコードで関数が成功かを判断する
+	HRESULT hr = CreateDXGIFactory1(IID_PPV_ARGS(&dxgiFactory));
+	assert(SUCCEEDED(hr));
+
+	//利用するアダプター用の変数
+	IDXGIAdapter4* useAdapter = nullptr;
+	//高性能なGPUを優先してアダプターを列挙していく
+	for (UINT i = 0; dxgiFactory->EnumAdapterByGpuPreference(i,
+		DXGI_GPU_PREFERENCE_HIGH_PERFORMANCE, IID_PPV_ARGS(&useAdapter)) !=
+		DXGI_ERROR_NOT_FOUND; ++i) {
+		//アダプターの情報を取得する
+		DXGI_ADAPTER_DESC3 adapterDesc{};
+		hr = useAdapter->GetDesc3(&adapterDesc);
+		assert(SUCCEEDED(hr));
+		if (!(adapterDesc.Flags & DXGI_ADAPTER_FLAG3_SOFTWARE)) {
+			//ソフトウェアアダプターでなければ採用
+			Log(ConvertString(std::format(L"Use Adapter:{}\n",adapterDesc.Description)));
+			break;
+		}
+		useAdapter=nullptr;
+	}
+	assert(useAdapter != nullptr);
+
+	ID3D12Device* device = nullptr;
+	//昨日レベルトログ出力用の文字列
+	D3D_FEATURE_LEVEL featureLevels[]={
+		D3D_FEATURE_LEVEL_12_2,
+		D3D_FEATURE_LEVEL_12_1,
+		D3D_FEATURE_LEVEL_12_0,		
+	};
+	const char* featureLevelStrings[] = {
+		"12.2",
+		"12.1",
+		"12.0",
+	};
+	for (size_t i = 0; i < _countof(featureLevels); ++i)
+	{
+
+	}
+
 	//windowの×ボタンが押されるまでループ
 	while (msg.message != WM_QUIT) {
 		//windowにメッセージが来たら最優先で処理させる
+
 		if (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE)) {
 			TranslateMessage(&msg);
 			DispatchMessage(&msg);
 		}
 		else {
 			//ゲームの処理
-			
+				//出力ウィンドウへの文字出力
+			OutputDebugStringA("Hello,DirectX!\n");
 		}
-		//出力ウィンドウへの文字出力
-		OutputDebugStringA("Hello,DirectX!\n");
+
 	}
 
-	
+
 
 
 
