@@ -142,29 +142,82 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 		assert(SUCCEEDED(hr));
 		if (!(adapterDesc.Flags & DXGI_ADAPTER_FLAG3_SOFTWARE)) {
 			//ソフトウェアアダプターでなければ採用
-			Log(ConvertString(std::format(L"Use Adapter:{}\n",adapterDesc.Description)));
+			Log(ConvertString(std::format(L"Use Adapter:{}\n", adapterDesc.Description)));
 			break;
 		}
-		useAdapter=nullptr;
+		useAdapter = nullptr;
 	}
 	assert(useAdapter != nullptr);
 
 	ID3D12Device* device = nullptr;
-	//昨日レベルトログ出力用の文字列
-	D3D_FEATURE_LEVEL featureLevels[]={
+	//機能レベルトログ出力用の文字列
+	D3D_FEATURE_LEVEL featureLevels[] = {
 		D3D_FEATURE_LEVEL_12_2,
 		D3D_FEATURE_LEVEL_12_1,
-		D3D_FEATURE_LEVEL_12_0,		
+		D3D_FEATURE_LEVEL_12_0,
 	};
 	const char* featureLevelStrings[] = {
 		"12.2",
 		"12.1",
 		"12.0",
 	};
-	for (size_t i = 0; i < _countof(featureLevels); ++i)
-	{
-
+	//高い順に生成できるか試していく
+	for (size_t i = 0; i < _countof(featureLevels); ++i) {
+		//採用したアダプターでデバイスを生成
+		hr = D3D12CreateDevice(useAdapter, featureLevels[i], IID_PPV_ARGS(&device));
+		//指定した機能レベルで生成できたかを確認
+		if (SUCCEEDED(hr)) {
+			//生成できたらループを抜ける
+			Log(std::format("FeatureLevel:{}\n", featureLevelStrings[i]));
+			break;
+		}
 	}
+	//デバイスが生成できているか確認
+	assert(device != nullptr);
+	//初期化完了でログ」を出す
+	Log("Complete create D3D12Device!!!\n");
+
+	//コマンドキューの生成
+	ID3D12CommandQueue* commandQueue = nullptr;
+	D3D12_COMMAND_QUEUE_DESC commandQueueDesc{};	
+	hr=device->CreateCommandQueue(&commandQueueDesc, IID_PPV_ARGS(&commandQueue));
+	//コマンドキューが生成できているか確認
+	assert(SUCCEEDED(hr));
+
+	//コマンドアロケーターの生成
+	ID3D12CommandAllocator* commandAllocator = nullptr;
+	hr = device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&commandAllocator));
+	//コマンドアロケーターが生成できているか確認
+	assert(SUCCEEDED(hr));
+
+	//コマンドリストの生成
+	ID3D12GraphicsCommandList* commandList = nullptr;
+	hr = device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, commandAllocator, nullptr, 
+		IID_PPV_ARGS(&commandList));
+	//コマンドリストが生成できているか確認
+	assert(SUCCEEDED(hr));
+
+	IDXGISwapChain4* swapChain = nullptr;
+	DXGI_SWAP_CHAIN_DESC1 swapChainDesc{};
+	swapChainDesc.Width = kClientWidth;//ウィンドウの幅
+	swapChainDesc.Height = kClientHeight;//ウィンドウの高さ
+	swapChainDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;//ピクセルフォーマット
+	swapChainDesc.SampleDesc.Count = 1;//マルチサンプルしない
+	swapChainDesc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;//描画ターゲットとして使う
+	swapChainDesc.BufferCount = 2;//バッファ数
+	swapChainDesc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;//スワップエフェクト	
+	//ウィンドウハンドルを渡してスワップチェーンを生成
+	hr = dxgiFactory->CreateSwapChainForHwnd(commandQueue, hwnd, &swapChainDesc, nullptr, nullptr,
+		reinterpret_cast<IDXGISwapChain1**>(&swapChain));
+	assert(SUCCEEDED(hr));
+
+	//ディスクリプタヒープの生成
+	ID3D12DescriptorHeap* rtvDescriptorHeap = nullptr;
+	D3D12_DESCRIPTOR_HEAP_DESC rtvDescriptorHeapDesc{};
+	rtvDescriptorHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_RTV;//レンダーターゲットビュー用
+	rtvDescriptorHeapDesc.NumDescriptors = 2;	
+	hr = device->CreateDescriptorHeap(&rtvDescriptorHeapDesc, IID_PPV_ARGS(&rtvDescriptorHeap));
+	assert(SUCCEEDED(hr));
 
 	//windowの×ボタンが押されるまでループ
 	while (msg.message != WM_QUIT) {
