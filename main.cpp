@@ -55,6 +55,10 @@ void Log(const std::string& message) {
 	OutputDebugStringA(message.c_str());
 }
 
+void Log(const std::wstring& message) {
+	Log(ConvertString(message));
+}
+
 void Log(std::ostream& os, const std::string& message) {
 	os << message << std::endl;
 	OutputDebugStringA(message.c_str());
@@ -180,7 +184,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	//デバイスが生成できているか確認
 	assert(device != nullptr);
 	//初期化完了でログ」を出す
-	Log("Complete create D3D12Device!!!\n");
+	Log(std::format("Complete create D3D12Device!!!\n"));
 
 #ifdef _DEBUG
 	ID3D12InfoQueue* infoQueue = nullptr;
@@ -312,7 +316,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 		else {
 			//ゲームの処理
 				//出力ウィンドウへの文字出力
-			OutputDebugStringA("Hello,DirectX!\n");
+			Log("Hello,DirectX!\n");
 		}
 
 	}
