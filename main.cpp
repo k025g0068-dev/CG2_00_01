@@ -58,7 +58,7 @@ struct Material {
 	int32_t enableLighting;
 };
 
-struct TransformationMatrix{
+struct TransformationMatrix {
 	Matrix4x4 WVP;
 	Matrix4x4 world;
 };
@@ -919,7 +919,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 		0
 	}
 	};
-	
+
 
 	D3D12_INPUT_ELEMENT_DESC inputElementDescs[3] = {};
 	inputElementDescs[0].SemanticName = "POSITION";
@@ -986,7 +986,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	vertexData[5].texcoord = { 1.0f,1.0f };
 
 
-	
+
 
 	ID3D12Resource* materialResource = CreateBufferResource(device, sizeof(Material));
 	Material* materialData = nullptr;
@@ -1030,7 +1030,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	io.Fonts->Build();
 #endif
 
-	DirectX::ScratchImage mipImages = LoadTexture("resources/uvChecker.png");	
+	DirectX::ScratchImage mipImages = LoadTexture("resources/uvChecker.png");
 	const DirectX::TexMetadata& metadata = mipImages.GetMetadata();
 	ID3D12Resource* textureResource = CreateTextureResource(device, metadata);
 	UploadTextureData(textureResource, mipImages);
@@ -1067,7 +1067,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
 	D3D12_CPU_DESCRIPTOR_HANDLE textureSrvHandleCPU2 = GetCPUDescriptorHandle(srvDescriptorHeap, descriptorSizeSRV, 2);
 	D3D12_GPU_DESCRIPTOR_HANDLE textureSrvHandleGPU2 = GetGPUDescriptorHandle(srvDescriptorHeap, descriptorSizeSRV, 2);
-	device->CreateShaderResourceView(textureResource2,&srvDesc2, textureSrvHandleCPU2);
+	device->CreateShaderResourceView(textureResource2, &srvDesc2, textureSrvHandleCPU2);
 
 	Transform transform;
 	transform.scale = { 1.0f, 1.0f, 1.0f }; // 等倍
@@ -1143,7 +1143,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
 	uint32_t lonIndex = 0;
 	uint32_t latIndex = 0;
-		
+
 	float u = float(lonIndex) / float(kSubdivision);
 	float v = 1.0f - float(latIndex) / float(kSubdivision);
 
@@ -1155,7 +1155,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			uint32_t start = (latIndex * kSubdivision + lonIndex) * 6;
 			float lon = lonIndex * kLonEvery;
 
-		
+
 			uint32_t startIndex = (latIndex * kSubdivision + lonIndex) * 6;
 			float u = float(lonIndex) / float(kSubdivision);
 			float v = 1.0f - float(latIndex) / float(kSubdivision);
@@ -1169,9 +1169,9 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			vertexData[start].position.w = 1.0f;
 			vertexData[start].texcoord = { u, v };
 
-			vertexData[start].normal.x = vertexData[start].position.x; 
-			vertexData[start].normal.y = vertexData[start].position.y; 
-			vertexData[start].normal.z = vertexData[start].position.z; 
+			vertexData[start].normal.x = vertexData[start].position.x;
+			vertexData[start].normal.y = vertexData[start].position.y;
+			vertexData[start].normal.z = vertexData[start].position.z;
 
 			// b: (lat + θd, lon)
 			vertexData[start + 1].position.x = cos(lat + kLatEvery) * cos(lon);
@@ -1180,9 +1180,9 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			vertexData[start + 1].position.w = 1.0f;
 			vertexData[start + 1].texcoord = { u, v - vStep };
 
-			vertexData[start+1].normal.x = vertexData[start+1].position.x;
-			vertexData[start+1].normal.y = vertexData[start+1].position.y;
-			vertexData[start+1].normal.z = vertexData[start+1].position.z;
+			vertexData[start + 1].normal.x = vertexData[start + 1].position.x;
+			vertexData[start + 1].normal.y = vertexData[start + 1].position.y;
+			vertexData[start + 1].normal.z = vertexData[start + 1].position.z;
 
 			// c: (lat, lon + φd)
 			vertexData[start + 2].position.x = cos(lat) * cos(lon + kLonEvery);
@@ -1219,7 +1219,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			vertexData[start + 5].normal.x = vertexData[start + 5].position.x;
 			vertexData[start + 5].normal.y = vertexData[start + 5].position.y;
 			vertexData[start + 5].normal.z = vertexData[start + 5].position.z;
-			
+
 		}
 	}
 
@@ -1229,7 +1229,22 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	Material* materialDataSprite = nullptr;
 	materialResourceSprite->Map(0, nullptr, reinterpret_cast<void**>(&materialDataSprite));
 	materialDataSprite->color = { 1.0f, 1.0f, 1.0f, 1.0f };
-	materialDataSprite->enableLighting = false;	
+	materialDataSprite->enableLighting = false;
+
+	ID3D12Resource* indexResourceSprite = CreateBufferResource(device, sizeof(uint32_t) * 6);
+	D3D12_INDEX_BUFFER_VIEW indexBufferViewSprite{};
+	//リソースの先頭のアドレスから使う
+	indexBufferViewSprite.BufferLocation = indexResourceSprite->GetGPUVirtualAddress();
+	//使用するリソースのサイズはインデックス６つ分のサイズ
+	indexBufferViewSprite.SizeInBytes = sizeof(uint32_t) * 6;
+	//インデックスはuint32_tとする
+	indexBufferViewSprite.Format = DXGI_FORMAT_R32_UINT;
+	//インデックスリソースにデータを書き込む
+	uint32_t* indexDataSprite = nullptr;
+	indexResourceSprite->Map(0, nullptr, reinterpret_cast<void**>(&indexDataSprite));
+	indexDataSprite[0] = 0; indexDataSprite[1] = 1; indexDataSprite[2] = 2;
+	indexDataSprite[3] = 1; indexDataSprite[4] = 3; indexDataSprite[5] = 2;
+
 
 	// windowの×ボタンが押されるまでループ
 	while (msg.message != WM_QUIT) {
@@ -1269,7 +1284,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			ImGui::Render();
 #endif
 
-			
+
 
 			//--- ここに毎フレームの更新処理を記述する ---			
 			Matrix4x4 worldMatrixSprite = MakeAffineMatrix(transformSprite.scale, transformSprite.rotate, transformSprite.translate);
@@ -1291,7 +1306,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			wvpData->world = worldMatrix;
 
 
-			
+
 
 			// --- ここに毎フレームの描画処理を記述する ---
 
@@ -1326,6 +1341,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			commandList->SetGraphicsRootConstantBufferView(0, materialResource->GetGPUVirtualAddress());
 			commandList->SetGraphicsRootConstantBufferView(1, wvpResource->GetGPUVirtualAddress());
 			commandList->SetGraphicsRootConstantBufferView(3, directionalLightResource->GetGPUVirtualAddress());
+			commandList->IASetIndexBuffer(&indexBufferViewSprite);
 			commandList->SetGraphicsRootDescriptorTable(2, useMonsterBall ? textureSrvHandleGPU2 : textureSrvHandleGPU);
 			commandList->DrawInstanced(vertexCount, 1, 0, 0);
 
@@ -1334,7 +1350,8 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			commandList->IASetVertexBuffers(0, 1, &vertexBufferViewSprite);
 			commandList->SetGraphicsRootConstantBufferView(1, transformationMatrixResourceSprite->GetGPUVirtualAddress());
 			commandList->DrawInstanced(6, 1, 0, 0);
-			
+			commandList->DrawIndexedInstanced(6, 1, 0, 0, 0);
+
 
 
 #ifdef USE_IMGUI
