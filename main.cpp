@@ -24,6 +24,7 @@ extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hwnd, UINT msg
 #pragma comment(lib,"d3d12.lib")
 #pragma comment(lib,"dxgi.lib")
 
+
 struct Vector4 {
 	float x, y, z, w;
 };
@@ -56,6 +57,8 @@ struct VertexData {
 struct Material {
 	Vector4 color;
 	int32_t enableLighting;
+	float padding[3];
+	Matrix4x4 uvTransform;
 };
 
 struct TransformationMatrix {
@@ -316,6 +319,12 @@ Matrix4x4 Inverse(const Matrix4x4& mat) {
 
 	return result;
 }
+
+Transform uvTransformSprite{
+	{1.0f,1.0f,1.0f},
+	{0.0f,0.0f,0.0f},
+	{0.0f,0.0f,0.0f},
+};
 
 //現在時刻を取得
 std::chrono::system_clock::time_point now = std::chrono::system_clock::now();
@@ -993,6 +1002,9 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	materialResource->Map(0, nullptr, reinterpret_cast<void**>(&materialData));
 	materialData->color = Vector4(1.0f, 0.0f, 0.0f, 1.0f);
 	materialData->enableLighting = true;
+	materialData->uvTransform = MakeIdentity4x4();
+
+
 
 	ID3D12Resource* directionalLightResource = CreateBufferResource(device, sizeof(DirectionalLight));
 	DirectionalLight* directionalLightData = nullptr;
@@ -1230,6 +1242,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	materialResourceSprite->Map(0, nullptr, reinterpret_cast<void**>(&materialDataSprite));
 	materialDataSprite->color = { 1.0f, 1.0f, 1.0f, 1.0f };
 	materialDataSprite->enableLighting = false;
+	materialDataSprite->uvTransform = MakeIdentity4x4();
 
 	ID3D12Resource* indexResourceSprite = CreateBufferResource(device, sizeof(uint32_t) * 6);
 	D3D12_INDEX_BUFFER_VIEW indexBufferViewSprite{};
@@ -1281,6 +1294,10 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			ImGui::DragFloat3("translate", &transform.translate.x);
 			ImGui::End();
 
+			ImGui::DragFloat2("UVTranslate", &uvTransformSprite.translate.x, 0.01f, -10.0f, 10.0f);
+			ImGui::DragFloat2("UVScale", &uvTransformSprite.scale.x, 0.01f, -10.0f, 10.0f);
+			ImGui::SliderAngle("UVRotate", &uvTransformSprite.rotate.z);
+
 			ImGui::Render();
 #endif
 
@@ -1305,7 +1322,10 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			wvpData->WVP = worldViewProjectionMatrix;
 			wvpData->world = worldMatrix;
 
-
+			Matrix4x4 uvTransformMatrix = MakeScaleMatrix(uvTransformSprite.scale);
+			uvTransformMatrix = Multiply(uvTransformMatrix, MakeRotateZMatrix(uvTransformSprite.rotate.z));
+			uvTransformMatrix = Multiply(uvTransformMatrix, MakeTranslationMatrix(uvTransformSprite.translate));
+			materialDataSprite->uvTransform = uvTransformMatrix;
 
 
 			// --- ここに毎フレームの描画処理を記述する ---
@@ -1401,6 +1421,8 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	transformationMatrixResourceSprite->Release();
 	graphicsPipelineState->Release();
 	srvDescriptorHeap->Release();
+	
+
 
 	// ★追加: 完全に漏れていた DSV用ヒープを解放
 	if (dsvDescriptorHeap) {
@@ -1418,6 +1440,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	directionalLightResource->Release();
 	textureResource->Release();
 	textureResource2->Release();
+
 
 	rootSignature->Release();
 	pixelShaderBlob->Release();
@@ -1462,6 +1485,8 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	}
 
 	CoUninitialize();
+
+
 
 	return 0;
 }
