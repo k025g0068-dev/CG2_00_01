@@ -364,3 +364,5 @@ DirectXGame/imgui.ini
 /logs
 
 imgui.ini
+
+!resources/**/*.obj

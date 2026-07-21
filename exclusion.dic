@@ -1,3 +1,7 @@
 hlsl
 dxgi
 Descs
+normals
+texcoords
+indentifier
+texcoord
