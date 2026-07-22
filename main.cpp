@@ -14,7 +14,6 @@
 #include<dxcapi.h>
 #include<fstream>
 #include<sstream>
-#include<wrl.h>
 #include"externals/DirectXTex/DirectXTex.h"
 #ifdef USE_IMGUI
 #include"externals/imugi/imgui.h"
@@ -75,29 +74,13 @@ struct DirectionalLight {
 	float intensity;
 };
 
-struct MaterialData {
-	std::string textureFilePath;
-};
-
 struct ModelData {
 	std::vector<VertexData>vertices;
 	MaterialData material;
 };
 
-class ResourceObject
-{
-public:
-	ResourceObject(ID3D12Resource* resource)
-		:resource_(resource)
-	{}
-	~ResourceObject() {
-		if (resource_) {
-			resource_->Release();
-		}
-	}
-	ID3D12Resource* Get() { return resource_; }
-private:
-	ID3D12Resource* resource_;
+struct MaterialData {
+	std::string textureFilePath;
 };
 
 Matrix4x4 MakeIdentity4x4() {
@@ -644,32 +627,6 @@ D3D12_GPU_DESCRIPTOR_HANDLE GetGPUDescriptorHandle(ID3D12DescriptorHeap* descrip
 	return handleGPU;
 }
 
-MaterialData LoadMaterialTemplateFile(const std::string& directoryPath, const std::string& filename) {
-	MaterialData materialData;//構築するMaterialData
-	std::string line;//ファイルから読んだ１行を格納するもの
-	std::ifstream file(directoryPath + "/" + filename);//ファイルを開く
-	assert(file.is_open());//とりあえず開かなかったら止める
-
-	while (std::getline(file, line)) {
-		std::string identifier;
-		std::istringstream s(line);
-		s >> identifier;
-
-		//identifierに応じた処理
-		if (identifier == "map_Kd") {
-			std::string textureFilename;
-			s >> textureFilename;
-			//連続してファイルパスにする
-			materialData.textureFilePath = directoryPath + "/" + textureFilename;
-		}
-
-	}
-
-
-	return materialData;
-}
-
-
 ModelData LoadObjFile(const std::string& directoryPath, const std::string& filename)
 {
 	ModelData modelData;//構築するModelData
@@ -690,6 +647,7 @@ ModelData LoadObjFile(const std::string& directoryPath, const std::string& filen
 		if (identifier == "v") {
 			Vector4 position;
 			s >> position.x >> position.y >> position.z;
+			position.x *= -1.0f;
 			position.w = 1.0f;
 			positions.push_back(position);
 		}
@@ -702,6 +660,7 @@ ModelData LoadObjFile(const std::string& directoryPath, const std::string& filen
 		else if (identifier == "vn") {
 			Vector3 normal;
 			s >> normal.x >> normal.y >> normal.z;
+			normal.x *= -1.0f;
 			normals.push_back(normal);
 		}
 		else if (identifier == "f") {
@@ -723,7 +682,7 @@ ModelData LoadObjFile(const std::string& directoryPath, const std::string& filen
 				Vector2 texcoord = texcoords[elementIndices[1] - 1];
 				Vector3 normal = normals[elementIndices[2] - 1];
 				VertexData vertex = { position,texcoord,normal };
-				modelData.vertices.push_back(vertex);
+				/*modelData.vertices.push_back(vertex);*/
 
 				triangle[faceVertex] = { position,texcoord,normal };
 			}
@@ -744,13 +703,35 @@ ModelData LoadObjFile(const std::string& directoryPath, const std::string& filen
 	return modelData;
 }
 
+MaterialData LoadMaterialTemplateFile(const std::string& directoryPath, const std::string& filename) {
+	MaterialData materialData;//構築するMatirialData
+	std::string line;//ファイルから読んだ１行を格納するもの
+	std::ifstream file(directoryPath + "/" + filename);//ファイルを開く
+	assert(file.is_open());//とりあえず開かなかったら止める
+
+	while (std::getline(file, line)) {
+		std::string identifier;
+		std::istringstream s(line);
+		s >> identifier;
+
+		//identfierに応じた処理
+		if (identifier == "map_Kd") {
+			std::string textureFilename;
+			s >> textureFilename;
+			//連続してファイルパスにする
+			materialData.textureFilePath = directoryPath + "/" + textureFilename;
+		}
+
+	}
+
+
+	return materialData;
+}
 
 
 // Windowsアプリケーションのエントリーポイント（main関数）
 int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	CoInitializeEx(0, COINIT_MULTITHREADED);
-	
-
 
 	WNDCLASS wc{};
 	//ウィンドウプロシージャの指定
@@ -805,7 +786,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	std::filesystem::create_directory("logs");
 
 	//DXGIファクトリーの生成	
-	Microsoft::WRL::ComPtr<IDXGIFactory7> dxgiFactory = nullptr;
+	IDXGIFactory7* dxgiFactory = nullptr;
 	//HRESULTはエラーコードで関数が成功かを判断する
 	HRESULT hr = CreateDXGIFactory1(IID_PPV_ARGS(&dxgiFactory));
 	assert(SUCCEEDED(hr));
@@ -895,20 +876,20 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	assert(SUCCEEDED(hr));
 
 	//コマンドアロケーターの生成
-	Microsoft::WRL::ComPtr<ID3D12CommandAllocator> commandAllocator;
+	ID3D12CommandAllocator* commandAllocator = nullptr;
 	hr = device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&commandAllocator));
 	//コマンドアロケーターが生成できているか確認
 	assert(SUCCEEDED(hr));
 
 	//コマンドリストの生成
 	ID3D12GraphicsCommandList* commandList = nullptr;
-	hr = device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, commandAllocator.Get(), nullptr,
+	hr = device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, commandAllocator, nullptr,
 		IID_PPV_ARGS(&commandList));
 	//コマンドリストが生成できているか確認
 	assert(SUCCEEDED(hr));
 
 	//スワップチェーンの生成
-	Microsoft::WRL::ComPtr<IDXGISwapChain4> swapChain = nullptr;
+	IDXGISwapChain4* swapChain = nullptr;
 	DXGI_SWAP_CHAIN_DESC1 swapChainDesc{};
 	swapChainDesc.Width = kClientWidth;//ウィンドウの幅
 	swapChainDesc.Height = kClientHeight;//ウィンドウの高さ
@@ -919,7 +900,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	swapChainDesc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;//スワップエフェクト	
 	//ウィンドウハンドルを渡してスワップチェーンを生成
 	hr = dxgiFactory->CreateSwapChainForHwnd(commandQueue, hwnd, &swapChainDesc, nullptr, nullptr,
-		reinterpret_cast<IDXGISwapChain1**>(swapChain.GetAddressOf()));
+		reinterpret_cast<IDXGISwapChain1**>(&swapChain));
 	assert(SUCCEEDED(hr));
 
 	//ディスクリプタヒープの生成
@@ -1194,13 +1175,12 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	ID3D12Resource* textureResource = CreateTextureResource(device, metadata);
 	UploadTextureData(textureResource, mipImages);
 
-	/*DirectX::ScratchImage mipImages2 = LoadTexture("resources/monsterBall.png");*/
 	DirectX::ScratchImage mipImages2 = LoadTexture(modelData.material.textureFilePath);
 	const DirectX::TexMetadata& metadata2 = mipImages2.GetMetadata();
 	ID3D12Resource* textureResource2 = CreateTextureResource(device, metadata2);
 	UploadTextureData(textureResource2, mipImages2);
 
-
+	
 
 	D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc{};
 	srvDesc.Format = metadata.format;
@@ -1259,10 +1239,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	dsvDesc.Format = DXGI_FORMAT_D24_UNORM_S8_UINT;
 	dsvDesc.ViewDimension = D3D12_DSV_DIMENSION_TEXTURE2D;
 
-	device->CreateDepthStencilView(
-		depthStencilResource,
-		&dsvDesc,
-		dsvDescriptorHeap->GetCPUDescriptorHandleForHeapStart());
+	device->CreateDepthStencilView(depthStencilResource, &dsvDesc, dsvDescriptorHeap->GetCPUDescriptorHandleForHeapStart());
 
 	D3D12_DEPTH_STENCIL_DESC depthStencilDesc{};
 	depthStencilDesc.DepthEnable = true;
@@ -1555,7 +1532,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
 			// 9. 次のフレームのためにアロケーターとリストをリセット
 			commandAllocator->Reset();
-			commandList->Reset(commandAllocator.Get(), nullptr);
+			commandList->Reset(commandAllocator, nullptr);
 
 			/*Log("Hello,DirectX!\n");*/
 
@@ -1568,7 +1545,6 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	ImGui_ImplWin32_Shutdown();
 	ImGui::DestroyContext();
 #endif
-	
 	indexResourceSprite->Release();
 	// === 1. デバイス（device）に依存するリソース・ヒープを先にすべて解放する ===
 	vertexResource->Release();
@@ -1584,11 +1560,17 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 		dsvDescriptorHeap->Release();
 	}
 
+	// ★追加・位置修正: 深度ステンシルバッファをデバイスより前に解放
+	if (depthStencilResource) {
+		depthStencilResource->Release();
+	}
+
 	materialResource->Release();
 	materialResourceSprite->Release();
 	wvpResource->Release();
 	directionalLightResource->Release();
-
+	textureResource->Release();
+	textureResource2->Release();
 
 
 	rootSignature->Release();
@@ -1611,30 +1593,27 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	swapChainResources[0]->Release();
 	swapChainResources[1]->Release();
 	swapChain->Release();
-	commandList->Release();	
+	commandList->Release();
+	commandAllocator->Release();
 	commandQueue->Release();
 
 	// === 4. デバイス本体とファクトリを【最後に】解放する ===
 	device->Release();
 	useAdapter->Release();
-	
+	dxgiFactory->Release();
 
 #ifdef _DEBUG
 	debugController->Release();
 #endif // _DEBUG
-	struct D3DResourceLeakChecker{
-		~D3DResourceLeakChecker()
-		{
-			Microsoft::WRL::ComPtr<IDXGIDebug1> debug;
-			if (SUCCEEDED(DXGIGetDebugInterface1(0, IID_PPV_ARGS(&debug)))) {
-				debug->ReportLiveObjects(DXGI_DEBUG_ALL, DXGI_DEBUG_RLO_ALL);
-				debug->ReportLiveObjects(DXGI_DEBUG_APP, DXGI_DEBUG_RLO_ALL);
-				debug->ReportLiveObjects(DXGI_DEBUG_D3D12, DXGI_DEBUG_RLO_ALL);			
-			}
-		}
-	};
+
 	DestroyWindow(hwnd);
-	
+	IDXGIDebug1* debug;
+	if (SUCCEEDED(DXGIGetDebugInterface1(0, IID_PPV_ARGS(&debug)))) {
+		debug->ReportLiveObjects(DXGI_DEBUG_ALL, DXGI_DEBUG_RLO_ALL);
+		debug->ReportLiveObjects(DXGI_DEBUG_APP, DXGI_DEBUG_RLO_ALL);
+		debug->ReportLiveObjects(DXGI_DEBUG_D3D12, DXGI_DEBUG_RLO_ALL);
+		debug->Release();
+	}
 
 	CoUninitialize();
 
