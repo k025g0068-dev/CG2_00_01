@@ -1,4 +1,5 @@
 #define _USE_MATH_DEFINES
+#define DIRECTINPUT_VERSION 0x0800
 #include <windows.h>
 #include <cstdint>
 #include <string>
@@ -16,6 +17,7 @@
 #include<sstream>
 #include<wrl.h>
 #include<xaudio2.h>
+#include <dinput.h>
 #include"externals/DirectXTex/DirectXTex.h"
 #ifdef USE_IMGUI
 #include"externals/imugi/imgui.h"
@@ -28,7 +30,8 @@ extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hwnd, UINT msg
 #pragma comment(lib,"d3d12.lib")
 #pragma comment(lib,"dxgi.lib")
 #pragma comment(lib,"xaudio2.lib")
-
+#pragma comment(lib,"dinput8.lib")
+#pragma comment(lib,"dxguid.lib")
 
 struct Vector4 {
 	float x, y, z, w;
@@ -766,6 +769,11 @@ SoundData SoundLoadWave(const char* filename)
 	assert(file.is_open());
 
 	RiffHeader riff;
+	file.read((char*)&riff, sizeof(riff));
+	if (strncmp(riff.chunk.id, "RIFF", 4) != 0) {
+		assert(0);
+	}
+
 	if (strncmp(riff.type, "WAVE", 4) != 0) {
 		assert(0);
 	}
@@ -870,6 +878,10 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 		/*debugController->SetEnableGPUBasedValidation(TRUE);*/
 	}
 #endif // DEBUG
+
+
+
+
 
 
 	//ウィンドウの表示
@@ -1276,7 +1288,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	Microsoft::WRL::ComPtr<ID3D12Resource> textureResource2 = CreateTextureResource(device, metadata2);
 	UploadTextureData(textureResource2.Get(), mipImages2);
 
-
+	SoundData soundData1 = SoundLoadWave("sounds/Alarm01.wav");
 
 	D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc{};
 	srvDesc.Format = metadata.format;
@@ -1493,20 +1505,39 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	hr = XAudio2Create(&xAudio2, 0, XAUDIO2_DEFAULT_PROCESSOR);
 	hr = xAudio2->CreateMasteringVoice(&masterVoice);
 
-	SoundData soundData1 = SoundLoadWave("Resource/Alarm01.wav");
-
 	SoundPlayWave(xAudio2.Get(), soundData1);
 
-	
+	//DirectInputの初期化
+	IDirectInput8* directInput = nullptr;
+	hr = DirectInput8Create(wc.hInstance, DIRECTINPUT_VERSION, IID_IDirectInput8,
+		(void**)&directInput, nullptr);
+	assert(SUCCEEDED(hr));
+
+	//キーボードデバイスの生成
+	IDirectInputDevice8* keyboard = nullptr;
+	hr = directInput->CreateDevice(GUID_SysKeyboard, &keyboard, NULL);
+	assert(SUCCEEDED(hr));
+	//入力データの形式のセット
+	hr = keyboard->SetDataFormat(&c_dfDIKeyboard);//標準形式
+	assert(SUCCEEDED(hr));
+
+	hr = keyboard->SetCooperativeLevel(
+		hwnd, DISCL_FOREGROUND | DISCL_NONEXCLUSIVE | DISCL_NOWINKEY);
+	assert(SUCCEEDED(hr));
 
 	// windowの×ボタンが押されるまでループ
 	while (msg.message != WM_QUIT) {
-
-
 		if (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE)) {
 			TranslateMessage(&msg);
 			DispatchMessage(&msg);
 
+			keyboard->Acquire();
+			BYTE key[256] = {};
+			keyboard->GetDeviceState(sizeof(key), key);
+
+			if (key[DIK_0]) {
+				OutputDebugStringA("Hit 0\n");//出力windowに「Hit 0」と表示
+			}
 		}
 		else {
 #ifdef USE_IMGUI
