@@ -1,0 +1,6 @@
+追加要素
+sphereの描画
+sphereとmodelのライトや色が操作できる
+UvTransformができる
+spriteとmodelとsphereの複数描画してある
+サウンドも流れる
