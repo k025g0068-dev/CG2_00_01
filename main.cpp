@@ -36,7 +36,15 @@ extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hwnd, UINT msg
 #pragma comment(lib,"dinput8.lib")
 #pragma comment(lib,"dxguid.lib")
 
-
+enum BlendMode {
+	kBlendModeNone,//ブレンドなし
+	kBlendModeNomral,//通常ブレンドα
+	kBlendModeAdd,//加算ブレンド
+	kBlendModeSubtract,//減算ブレンド
+	kBlendModeMultiply,//乗算ブレンド
+	kBlendModeScreen,//スクリーンブレンド
+	kCount0fBlendMode,//利用なし
+};
 
 struct Transform {
 	Vector3 scale;
@@ -350,9 +358,9 @@ Matrix4x4 Inverse(const Matrix4x4& mat) {
 }
 
 Transform uvTransformSprite{
-	{1.0f,1.0f,1.0f},
-	{0.0f,0.0f,0.0f},
-	{0.0f,0.0f,0.0f},
+	{ 1.0f,1.0f,1.0f },
+	{ 0.0f,0.0f,0.0f },
+	{ 0.0f,0.0f,0.0f },
 };
 
 //現在時刻を取得
@@ -799,7 +807,7 @@ void SoundUnload(SoundData* soundData) {
 	delete[]soundData->pBuffer;
 	soundData->pBuffer = 0;
 	soundData->bufferSize = 0;
-	soundData->wfex = {  };
+	soundData->wfex = {};
 }
 
 void SoundPlayWave(IXAudio2* xAudio2, const SoundData& soundData) {
@@ -1114,6 +1122,19 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
 	D3D12_BLEND_DESC blendDesc{};
 	blendDesc.RenderTarget[0].RenderTargetWriteMask = D3D12_COLOR_WRITE_ENABLE_ALL;
+	blendDesc.RenderTarget[0].BlendEnable = TRUE;
+	blendDesc.RenderTarget[0].SrcBlend =
+		//D3D12_BLEND_SRC_ALPHA;//ノーマル 
+		D3D12_BLEND_SRC_ALPHA;//減算合成
+	blendDesc.RenderTarget[0].BlendOp =
+		//D3D12_BLEND_OP_ADD;//ノーマル
+		D3D12_BLEND_OP_REV_SUBTRACT;//減算合成
+	blendDesc.RenderTarget[0].DestBlend =
+		//D3D12_BLEND_INV_SRC_ALPHA;//ノーマル 
+		D3D12_BLEND_ONE;//減算合成
+	blendDesc.RenderTarget[0].SrcBlendAlpha = D3D12_BLEND_ONE;
+	blendDesc.RenderTarget[0].BlendOpAlpha = D3D12_BLEND_OP_ADD;
+	blendDesc.RenderTarget[0].DestBlendAlpha = D3D12_BLEND_ZERO;
 
 	D3D12_RASTERIZER_DESC rasterizerDesc{};
 	rasterizerDesc.CullMode = D3D12_CULL_MODE_BACK;
@@ -1233,7 +1254,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	}
 
 	//モデル読み込み
-	ModelData modelData = LoadObjFile("resources", "plane.obj");
+	ModelData modelData = LoadObjFile("resources", "fence.obj");
 	//頂点リソースを作る
 	Microsoft::WRL::ComPtr<ID3D12Resource> vertexResource =
 		CreateBufferResource(device, sizeof(VertexData) * modelData.vertices.size());
@@ -1375,7 +1396,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
 	//Transformと定点バッファ
 	// モデルと重ならないように少し横（x方向）にずらして配置
-	Transform transformSphere{ {1.0f,1.0f,1.0f}, {0.0f,0.0f,0.0f}, {2.5f,0.0f,0.0f} };
+	Transform transformSphere{ { 1.0f,1.0f,1.0f },{ 0.0f,0.0f,0.0f },{ 2.5f,0.0f,0.0f } };
 
 	Microsoft::WRL::ComPtr<ID3D12Resource> wvpResourceSphere = CreateBufferResource(device, sizeof(TransformationMatrix));
 	TransformationMatrix* wvpDataSphere = nullptr;
@@ -1383,7 +1404,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	wvpDataSphere->WVP = MakeIdentity4x4();
 	wvpDataSphere->world = MakeIdentity4x4();
 
-	Transform cameraTransform{ {1.0f,1.0f,1.0f},{0.0f,0.0f,0.0f},{0.0f,0.0f,-5.0f} };
+	Transform cameraTransform{ { 1.0f,1.0f,1.0f },{ 0.0f,0.0f,0.0f },{ 0.0f,0.0f,-5.0f } };
 
 	Matrix4x4 projectionMatrix = MakePerspectiveFovMatrix(0.45f, static_cast<float>(kClientWidth) / kClientHeight, 0.1f, 100.0f);
 
@@ -1451,7 +1472,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	transformationMatrixResourceSprite->Map(0, nullptr, reinterpret_cast<void**>(&transformationMatrixDataSprite));
 	transformationMatrixDataSprite->WVP = MakeIdentity4x4();
 	transformationMatrixDataSprite->world = MakeIdentity4x4();
-	Transform transformSprite{ {1.0f,1.0f,1.0f},{0.0f,0.0f,0.0f},{0.0f,0.0f,0.0f } };
+	Transform transformSprite{ { 1.0f,1.0f,1.0f },{ 0.0f,0.0f,0.0f },{ 0.0f,0.0f,0.0f } };
 
 	//uint32_t lonIndex = 0;
 	//uint32_t latIndex = 0;
@@ -1596,7 +1617,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			DispatchMessage(&msg);
 
 			keyboard->Acquire();
-			
+
 			keyboard->GetDeviceState(sizeof(key), key);
 
 			if (key[DIK_0]) {
@@ -1608,43 +1629,63 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			ImGui_ImplDX12_NewFrame();
 			ImGui_ImplWin32_NewFrame();
 			ImGui::NewFrame();
-			ImGui::Checkbox("useMonsterBall", &useMonsterBall);
-			ImGui::ShowDemoWindow();
+			// ===== デバッグUI（1ウィンドウに集約）=====
+			ImGui::SetNextWindowPos(ImVec2(10.0f, 10.0f), ImGuiCond_FirstUseEver);
+			ImGui::SetNextWindowSize(ImVec2(400.0f, 560.0f), ImGuiCond_FirstUseEver);
+			ImGui::Begin("Debug");
 
-			ImGui::Begin("Material Settings");
-			ImGui::ColorEdit4("Triangle Color", &materialData->color.x);
-			ImGui::DragFloat3("rotate", &transformSprite.rotate.x, 0.1f);
-			ImGui::DragFloat3("translate", &transformSprite.translate.x, 0.1f);
+			// α値のバー付きカラーピッカー用フラグ
+			const ImGuiColorEditFlags colorFlags = ImGuiColorEditFlags_AlphaBar | ImGuiColorEditFlags_AlphaPreviewHalf;
+
+			if (ImGui::CollapsingHeader("Model (plane.obj)", ImGuiTreeNodeFlags_DefaultOpen)) {
+				ImGui::PushID("model");
+				ImGui::Checkbox("useMonsterBall", &useMonsterBall);
+				ImGui::ColorEdit4("Material Color (RGBA)", &materialData->color.x, colorFlags);
+				ImGui::DragFloat3("scale", &transform.scale.x, 0.01f);
+				ImGui::DragFloat3("rotate", &transform.rotate.x, 0.01f);
+				ImGui::DragFloat3("translate", &transform.translate.x, 0.01f);
+				ImGui::PopID();
+			}
+
+			if (ImGui::CollapsingHeader("Sphere", ImGuiTreeNodeFlags_DefaultOpen)) {
+				ImGui::PushID("sphere");
+				ImGui::ColorEdit4("Material Color (RGBA)", &materialDataSphere->color.x, colorFlags);
+				ImGui::DragFloat3("scale", &transformSphere.scale.x, 0.01f);
+				ImGui::DragFloat3("rotate", &transformSphere.rotate.x, 0.01f);
+				ImGui::DragFloat3("translate", &transformSphere.translate.x, 0.01f);
+				ImGui::PopID();
+			}
+
+			if (ImGui::CollapsingHeader("Sprite", ImGuiTreeNodeFlags_DefaultOpen)) {
+				ImGui::PushID("sprite");
+				ImGui::ColorEdit4("Material Color (RGBA)", &materialDataSprite->color.x, colorFlags);
+				ImGui::DragFloat3("scale", &transformSprite.scale.x, 0.01f);
+				ImGui::DragFloat3("rotate", &transformSprite.rotate.x, 0.01f);
+				ImGui::DragFloat3("translate", &transformSprite.translate.x, 1.0f);
+				ImGui::SeparatorText("UV Transform");
+				ImGui::DragFloat2("UVTranslate", &uvTransformSprite.translate.x, 0.01f, -10.0f, 10.0f);
+				ImGui::DragFloat2("UVScale", &uvTransformSprite.scale.x, 0.01f, -10.0f, 10.0f);
+				ImGui::SliderAngle("UVRotate", &uvTransformSprite.rotate.z);
+				ImGui::PopID();
+			}
+
+			if (ImGui::CollapsingHeader("Directional Light")) {
+				ImGui::PushID("light");
+				ImGui::ColorEdit4("color", &directionalLightData->color.x, colorFlags);
+				ImGui::DragFloat3("direction", &directionalLightData->direction.x, 0.01f);
+				ImGui::DragFloat("intensity", &directionalLightData->intensity, 0.01f);
+				ImGui::PopID();
+			}
+
+			ImGui::Separator();
+			static bool showDemoWindow = false;
+			ImGui::Checkbox("Show ImGui Demo", &showDemoWindow);
 			ImGui::End();
 
-			ImGui::Begin("light");
-			ImGui::ColorEdit4("color", &directionalLightData->color.x);
-			ImGui::DragFloat3("direction", &directionalLightData->direction.x, 0.1f);
-			ImGui::DragFloat("intensity", &directionalLightData->intensity, 0.1f);
-			ImGui::End();
+			if (showDemoWindow) {
+				ImGui::ShowDemoWindow(&showDemoWindow);
+			}
 
-			ImGui::Begin("model");
-			ImGui::DragFloat3("scale", &transform.scale.x);
-			ImGui::DragFloat3("rotate", &transform.rotate.x);
-			ImGui::DragFloat3("translate", &transform.translate.x);
-			ImGui::End();
-
-			ImGui::Begin("sprite");
-			ImGui::DragFloat2("UVTranslate", &uvTransformSprite.translate.x, 0.01f, -10.0f, 10.0f);
-			ImGui::DragFloat2("UVScale", &uvTransformSprite.scale.x, 0.01f, -10.0f, 10.0f);
-			ImGui::SliderAngle("UVRotate", &uvTransformSprite.rotate.z);
-
-			ImGui::DragFloat3("scale", &transformSprite.scale.x, 0.01f);
-			ImGui::DragFloat3("rotate", &transformSprite.rotate.x, 0.1f);
-			ImGui::DragFloat3("translate", &transformSprite.translate.x, 0.1f);
-			ImGui::End();
-
-			ImGui::Begin("sphere");
-			ImGui::ColorEdit4("color", &materialDataSphere->color.x);
-			ImGui::DragFloat3("scale", &transformSphere.scale.x, 0.01f);
-			ImGui::DragFloat3("rotate", &transformSphere.rotate.x, 0.1f);
-			ImGui::DragFloat3("translate", &transformSphere.translate.x, 0.1f);
-			ImGui::End();
 
 
 			ImGui::Render();
@@ -1661,7 +1702,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			transformationMatrixDataSprite->world = worldMatrixSprite;
 
 			//transform.rotate.y += 0.03f;
-			Matrix4x4 worldMatrix = MakeAffineMatrix(transform.scale, transform.rotate, transform.translate);						
+			Matrix4x4 worldMatrix = MakeAffineMatrix(transform.scale, transform.rotate, transform.translate);
 			projectionMatrix = MakePerspectiveFovMatrix(0.45f, static_cast<float>(kClientWidth) / kClientHeight, 0.1f, 100.0f);
 			// 2. WVP行列の合成と定数バッファへの転送
 			Matrix4x4 worldViewProjectionMatrix = Multiply(worldMatrix, Multiply(viewMatrix, projectionMatrix));
@@ -1684,8 +1725,8 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			}
 
 			if (isDubugCameraActive) {
-				debugCamera. Update();
-				viewMatrix = debugCamera.viewMatrix_;  
+				debugCamera.Update();
+				viewMatrix = debugCamera.viewMatrix_;
 			}
 
 			// --- ここに毎フレームの描画処理を記述する ---
