@@ -91,5 +91,14 @@
     <None Include="Object3d.hlsli">
       <Filter>リソース ファイル</Filter>
     </None>
+    <None Include="Particle.hlsli">
+      <Filter>リソース ファイル</Filter>
+    </None>
+    <None Include="Particle.VS.hlsl">
+      <Filter>リソース ファイル</Filter>
+    </None>
+    <None Include="Particle.PS.hlsl">
+      <Filter>リソース ファイル</Filter>
+    </None>
   </ItemGroup>
 </Project>
