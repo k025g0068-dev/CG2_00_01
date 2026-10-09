@@ -46,11 +46,6 @@ enum BlendMode {
 	kCount0fBlendMode,//利用なし
 };
 
-struct Transform {
-	Vector3 scale;
-	Vector3 rotate;
-	Vector3 translate;
-};
 
 struct VertexData {
 	Vector4 position;
@@ -107,6 +102,11 @@ struct SoundData {
 	BYTE* pBuffer;
 	//バッファのサイズ
 	unsigned int bufferSize;
+};
+
+struct Particle {
+	Transform transform;
+	Vector3 velocity;
 };
 
 Matrix4x4 MakeIdentity4x4() {
@@ -1165,13 +1165,13 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	blendDesc.RenderTarget[0].BlendEnable = TRUE;
 	blendDesc.RenderTarget[0].SrcBlend =
 		D3D12_BLEND_SRC_ALPHA;//ノーマル 
-		//D3D12_BLEND_SRC_ALPHA;//減算合成
+	//D3D12_BLEND_SRC_ALPHA;//減算合成
 	blendDesc.RenderTarget[0].BlendOp =
 		D3D12_BLEND_OP_ADD;//ノーマル
-		//D3D12_BLEND_OP_REV_SUBTRACT;//減算合成
+	//D3D12_BLEND_OP_REV_SUBTRACT;//減算合成
 	blendDesc.RenderTarget[0].DestBlend =
 		D3D12_BLEND_INV_SRC_ALPHA;//ノーマル 
-		//D3D12_BLEND_ONE;//減算合成
+	//D3D12_BLEND_ONE;//減算合成
 	blendDesc.RenderTarget[0].SrcBlendAlpha = D3D12_BLEND_ONE;
 	blendDesc.RenderTarget[0].BlendOpAlpha = D3D12_BLEND_OP_ADD;
 	blendDesc.RenderTarget[0].DestBlendAlpha = D3D12_BLEND_ZERO;
@@ -1659,12 +1659,12 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 		hwnd, DISCL_FOREGROUND | DISCL_NONEXCLUSIVE | DISCL_NOWINKEY);
 	assert(SUCCEEDED(hr));
 
-	const uint32_t kNuminstance = 10;
+	const uint32_t kNumInstance = 10;
 
-	Microsoft::WRL::ComPtr<ID3D12Resource> instancingResource = CreateBufferResource(device, sizeof(TransformationMatrix) * kNuminstance);
+	Microsoft::WRL::ComPtr<ID3D12Resource> instancingResource = CreateBufferResource(device, sizeof(TransformationMatrix) * kNumInstance);
 	TransformationMatrix* instancingData = nullptr;
 	instancingResource->Map(0, nullptr, reinterpret_cast<void**>(&instancingData));
-	for (uint32_t index = 0; index < kNuminstance; ++index) {
+	for (uint32_t index = 0; index < kNumInstance; ++index) {
 		instancingData[index].WVP = MakeIdentity4x4();
 		instancingData[index].world = MakeIdentity4x4();
 	}
@@ -1675,18 +1675,18 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	instancingSrvDesc.ViewDimension = D3D12_SRV_DIMENSION_BUFFER;
 	instancingSrvDesc.Buffer.FirstElement = 0;
 	instancingSrvDesc.Buffer.Flags = D3D12_BUFFER_SRV_FLAG_NONE;
-	instancingSrvDesc.Buffer.NumElements = kNuminstance;
+	instancingSrvDesc.Buffer.NumElements = kNumInstance;
 	instancingSrvDesc.Buffer.StructureByteStride = sizeof(TransformationMatrix);
 	D3D12_CPU_DESCRIPTOR_HANDLE instancingSrvHandleCPU = GetCPUDescriptorHandle(srvDescriptorHeap.Get(), descriptorSizeSRV, 3);
 	D3D12_GPU_DESCRIPTOR_HANDLE instancingSrvHandleGPU = GetGPUDescriptorHandle(srvDescriptorHeap.Get(), descriptorSizeSRV, 3);
 	device->CreateShaderResourceView(instancingResource.Get(), &instancingSrvDesc, instancingSrvHandleCPU);
 
-	Transform transforms[kNuminstance];
-	for (uint32_t index = 0; index < kNuminstance; ++index) {
-		transforms[index].scale = { 1.0f, 1.0f, 1.0f };
-		transforms[index].rotate = { 0.0f, 0.0f, 0.0f };
-		transforms[index].translate = { index * 0.1f, index * 0.1f, index * 0.1f };
-	}	
+	Particle particle[kNumInstance];
+	for (uint32_t index = 0; index < kNumInstance; ++index) {
+		particle[index].transform.scale = { 1.0f, 1.0f, 1.0f };
+		particle[index].transform.rotate = { 0.0f, 0.0f, 0.0f };
+		particle[index].transform.translate = { index * 0.1f, index * 0.1f, index * 0.1f };
+	}
 
 	DebugCamera debugCamera;
 	debugCamera.Initialize();
@@ -1815,13 +1815,23 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			// ↓ 追加：ビュー行列とプロジェクション行列を合成
 			Matrix4x4 viewProjectionMatrix = Multiply(viewMatrix, projectionMatrix);
 
-			for (uint32_t index = 0; index < kNuminstance; ++index) {
-				Matrix4x4 worldMatrix = MakeAffineMatrix(transforms[index].scale, transforms[index].rotate, transforms[index].translate);
+			for (uint32_t index = 0; index < kNumInstance; ++index) {
+				Matrix4x4 worldMatrix = MakeAffineMatrix(particle[index].transform.scale, particle[index].transform.rotate, particle[index].transform.translate);
 				Matrix4x4 worldViewProjectionMatrix = Multiply(worldMatrix, viewProjectionMatrix);
 				instancingData[index].WVP = worldViewProjectionMatrix;
 				instancingData[index].world = worldMatrix;
 			}
 
+			for (uint32_t index = 0; index < kNumInstance; ++index) {
+				particle[index].velocity = { 0.0f,1.0f,0.0f };				
+				const float kDeltaTime = 1.0f / 60.0f;
+				particle[index].transform.translate.x += particle[index].velocity.x * kDeltaTime;
+				particle[index].transform.translate.y += particle[index].velocity.y * kDeltaTime;
+				particle[index].transform.translate.z += particle[index].velocity.z * kDeltaTime;
+			}
+
+			
+			
 
 			// --- ここに毎フレームの描画処理を記述する ---
 
@@ -1860,7 +1870,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			commandList->SetGraphicsRootConstantBufferView(1, wvpResource->GetGPUVirtualAddress());
 			commandList->SetGraphicsRootConstantBufferView(3, directionalLightResource->GetGPUVirtualAddress());
 			commandList->IASetIndexBuffer(&indexBufferViewSprite);
-			commandList->SetGraphicsRootDescriptorTable(2, useMonsterBall ? textureSrvHandleGPU2 : textureSrvHandleGPU);			
+			commandList->SetGraphicsRootDescriptorTable(2, useMonsterBall ? textureSrvHandleGPU2 : textureSrvHandleGPU);
 			commandList->DrawInstanced(UINT(modelData.vertices.size()), 1, 0, 0);
 
 			commandList->SetGraphicsRootConstantBufferView(0, materialResourceSphere->GetGPUVirtualAddress());
@@ -1875,19 +1885,19 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			commandList->SetGraphicsRootConstantBufferView(1, transformationMatrixResourceSprite->GetGPUVirtualAddress());
 			commandList->DrawInstanced(6, 1, 0, 0);
 			commandList->DrawIndexedInstanced(6, 1, 0, 0, 0);
-		
+
 			commandList->SetGraphicsRootSignature(particleRootSignature);
 			commandList->SetPipelineState(particlePipelineState.Get());
 			commandList->IASetVertexBuffers(0, 1, &vertexBufferView);
 			commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
 			commandList->SetGraphicsRootConstantBufferView(0, materialResource->GetGPUVirtualAddress());
-			commandList->SetGraphicsRootDescriptorTable(1, instancingSrvHandleGPU);  
+			commandList->SetGraphicsRootDescriptorTable(1, instancingSrvHandleGPU);
 			commandList->SetGraphicsRootDescriptorTable(2, useMonsterBall ? textureSrvHandleGPU2 : textureSrvHandleGPU);
 			commandList->SetGraphicsRootConstantBufferView(3, directionalLightResource->GetGPUVirtualAddress());
 
-			commandList->DrawInstanced(UINT(modelData.vertices.size()), kNuminstance, 0, 0); 
-			
+			commandList->DrawInstanced(UINT(modelData.vertices.size()), kNumInstance, 0, 0);
+
 
 
 
