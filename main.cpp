@@ -1,7 +1,9 @@
 #define _USE_MATH_DEFINES
 #define DIRECTINPUT_VERSION 0x0800
-#include"DebugCamera.h"
-#include"Math.h"
+#include "DebugCamera.h"
+#include "Math.h"
+#include "Input.h"
+
 #include <windows.h>
 #include <cstdint>
 #include <string>
@@ -24,12 +26,14 @@
 #include <dinput.h>
 #include <numbers>
 #include "externals/DirectXTex/DirectXTex.h"
+
 #ifdef USE_IMGUI
 #include "externals/imugi/imgui.h"
 #include "externals/imugi/imgui_impl_dx12.h"
 #include "externals/imugi/imgui_impl_win32.h"
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hwnd, UINT msg, WPARAM wPram, LPARAM lPram);
 #endif
+
 #pragma comment(lib,"dxcompiler.lib")
 #pragma comment(lib,"dxguid.lib")
 #pragma comment(lib,"d3d12.lib")
@@ -851,10 +855,8 @@ void SoundPlayWave(IXAudio2* xAudio2, const SoundData& soundData) {
 // Windowsアプリケーションのエントリーポイント（main関数）
 int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	CoInitializeEx(0, COINIT_MULTITHREADED);
-
-
-
-	WNDCLASS wc{};
+	
+		WNDCLASS wc{};
 	//ウィンドウプロシージャの指定
 	wc.lpfnWndProc = WndProc;
 	//ウィンドウクラスの名前	
@@ -888,6 +890,11 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 		wc.hInstance,//インスタンスハンドル	
 		nullptr);//オプション
 
+	Input* input = nullptr;
+	input = new Input();
+	input->Initialize(wc.hInstance,hwnd);
+	input->Update();
+
 #ifdef _DEBUG
 	ID3D12Debug1* debugController = nullptr;
 	if (SUCCEEDED(D3D12GetDebugInterface(IID_PPV_ARGS(&debugController)))) {
@@ -897,11 +904,6 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 		/*debugController->SetEnableGPUBasedValidation(TRUE);*/
 	}
 #endif // DEBUG
-
-
-
-
-
 
 	//ウィンドウの表示
 	ShowWindow(hwnd, SW_SHOW);
@@ -1655,7 +1657,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
 
 	bool useBillboard = true;
-	int cameraViewMode = 1;            // 0:正面 1:見下ろし
+	int cameraViewMode = 1; 
 	bool useMonsterBall = true;
 	bool isParticleUpdate = true;
 	bool isParticleSpawn = false;
@@ -1696,23 +1698,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
 	SoundPlayWave(xAudio2.Get(), soundData1);
 
-	//DirectInputの初期化
-	IDirectInput8* directInput = nullptr;
-	hr = DirectInput8Create(wc.hInstance, DIRECTINPUT_VERSION, IID_IDirectInput8,
-		(void**)&directInput, nullptr);
-	assert(SUCCEEDED(hr));
-
-	//キーボードデバイスの生成
-	IDirectInputDevice8* keyboard = nullptr;
-	hr = directInput->CreateDevice(GUID_SysKeyboard, &keyboard, NULL);
-	assert(SUCCEEDED(hr));
-	//入力データの形式のセット
-	hr = keyboard->SetDataFormat(&c_dfDIKeyboard);//標準形式
-	assert(SUCCEEDED(hr));
-
-	hr = keyboard->SetCooperativeLevel(
-		hwnd, DISCL_FOREGROUND | DISCL_NONEXCLUSIVE | DISCL_NOWINKEY);
-	assert(SUCCEEDED(hr));
+	
 
 	const uint32_t kNumInstance = 10;
 
@@ -1747,23 +1733,17 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
 	DebugCamera debugCamera;
 	debugCamera.Initialize();
-	bool isDubugCameraActive = false;
+	bool isDubugCameraActive = false;	
 
 
-
-	BYTE key[256] = {};
 	// windowの×ボタンが押されるまでループ
 	while (msg.message != WM_QUIT) {
 		if (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE)) {
 			TranslateMessage(&msg);
 			DispatchMessage(&msg);
-
-			keyboard->Acquire();
-
-			keyboard->GetDeviceState(sizeof(key), key);
-
-			if (key[DIK_0]) {
-				OutputDebugStringA("Hit 0\n");//出力windowに「Hit 0」と表示
+					
+			if (input->PushKey(DIK_0)) {
+				OutputDebugStringA("Hit 0\n");
 			}
 		}
 		else {
@@ -1892,7 +1872,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			uvTransformMatrix = Multiply(uvTransformMatrix, MakeTranslationMatrix(uvTransformSprite.translate));
 			materialDataSprite->uvTransform = uvTransformMatrix;
 
-			if (key[DIK_SPACE]) {
+			if (input->PushKey(DIK_SPACE)) {
 				isDubugCameraActive = !isDubugCameraActive;
 			}
 
@@ -1913,9 +1893,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 				billboardMatrix.m[3][1] = 0.0f;
 				billboardMatrix.m[3][2] = 0.0f;
 			}
-
-
-
+			
 			for (uint32_t index = 0; index < kNumInstance; ++index) {
 				Matrix4x4 worldMatrix = Multiply(
 					Multiply(MakeScaleMatrix(particle[index].transform.scale), billboardMatrix),
@@ -2099,12 +2077,11 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			}
 		}
 	};
+
+	delete input;
+	input = nullptr;
+
 	DestroyWindow(hwnd);
-
-
 	CoUninitialize();
-
-
-
 	return 0;
 }
