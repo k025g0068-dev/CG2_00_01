@@ -26,9 +26,9 @@ void Input::Initialize(HINSTANCE hInstance, HWND hwnd) {
 
 void Input::Update() {
 	memcpy(keyPre, key, sizeof(key));
-
 	keyboard->Acquire();
 	keyboard->GetDeviceState(sizeof(key), key);
+
 }
 
 bool Input::PushKey(BYTE keyNumber) {
