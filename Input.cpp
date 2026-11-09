@@ -38,5 +38,4 @@ bool Input::PushKey(BYTE keyNumber) {
 bool Input::TriggerKey(BYTE keyNumber) {
 	// 前フレームは押されておらず、今フレームで押されている
 	return !keyPre[keyNumber] && key[keyNumber];
-
 }
