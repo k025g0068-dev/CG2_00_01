@@ -1981,13 +1981,6 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			if (input->PushKey(DIK_0)) {
 				OutputDebugStringA("Hit 0\n");
 			}
-		}
-		else {
-			input->Update();   // ← 毎フレーム、else の先頭で1回
-
-			if (input->PushKey(DIK_0)) {
-				OutputDebugStringA("Hit 0\n");
-			}
 
 #ifdef USE_IMGUI
 			ImGui_ImplDX12_NewFrame();

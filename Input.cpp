@@ -28,13 +28,21 @@ void Input::Update() {
 	memcpy(keyPre, key, sizeof(key));
 
 	keyboard->Acquire();
-	keyboard->GetDeviceState(sizeof(key), key);
+	keyboard->GetDeviceState(sizeof(key), key);	
+	memcpy(keyPre, key, sizeof(key));
+	memcpy(keyPre, key, sizeof(key));
+	memcpy(keyPre, key, sizeof(key));
+	memcpy(keyPre, key, sizeof(key));
 }
 
 bool Input::PushKey(BYTE keyNumber) {
-	return key[keyNumber] != 0;
-}
+	// 前フレームは押されておらず、今フレームで押されている
+	return !keyPre[keyNumber] && key[keyNumber];
+	}
+
+	return false;
 
 bool Input::TriggerKey(BYTE keyNumber) {
-	return key[keyNumber] && !keyPre[keyNumber];
+	// 前フレームは押されておらず、今フレームで押されている
+	return !keyPre[keyNumber] && key[keyNumber];
 }
