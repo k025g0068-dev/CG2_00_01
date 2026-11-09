@@ -2067,6 +2067,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 				ImGui::DragFloat3("FireCenter", &fireCenter.x, 0.05f);
 				ImGui::DragFloat("SpreadSpeed", &fireSpreadSpeed, 0.01f, 0.0f, 5.0f);
 				ImGui::DragFloat("MaxRadius", &fireMaxRadius, 0.05f, 0.5f, 20.0f);
+
 				if (ImGui::Button("Explode")) {
 					if (explosionFlash <= 0.0f) {
 						lightBaseIntensity = directionalLightData->intensity;
@@ -2196,7 +2197,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 				fireRadius = (std::min)(fireRadius + fireSpreadSpeed * kDeltaTime, fireMaxRadius);
 				uint32_t fireCount = (uint32_t)(std::min)(2.0f + fireRadius * 3.0f, 10.0f);
 				for (uint32_t i = 0; i < fireCount; ++i) {
-					particle.push_back(MakeFireParticle(randomEngine,fireCenter,fireRadius));
+					particle.push_back(MakeFireParticle(randomEngine, fireCenter, fireRadius));
 				}
 			}
 
@@ -2219,7 +2220,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 						it->velocity.y += accelerationField.acceleration.y * kDeltaTime;
 						it->velocity.z += accelerationField.acceleration.z * kDeltaTime;
 					}
-					UpdateBlastVelocity(*it, kDeltaTime);  
+					UpdateBlastVelocity(*it, kDeltaTime);
 					it->transform.translate.x += it->velocity.x * kDeltaTime;
 					it->transform.translate.y += it->velocity.y * kDeltaTime;
 					it->transform.translate.z += it->velocity.z * kDeltaTime;
@@ -2231,7 +2232,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
 				Vector3 drawScale = it->transform.scale;
 				if (it->isFire) {
-					float s = 1.0f - 0.6f * t;    
+					float s = 1.0f - 0.6f * t;
 					drawScale = { drawScale.x * s, drawScale.y * s, drawScale.z * s };
 				}
 
@@ -2252,7 +2253,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 					instancingData[numInstance].color = blastColor;
 				}
 				instancingData[numInstance].color.w = alpha;
-				++numInstance;				
+				++numInstance;
 				++it;
 			}
 
