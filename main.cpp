@@ -1174,7 +1174,8 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	swapChainDesc.BufferCount = 2;//バッファ数
 	swapChainDesc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;//スワップエフェクト	
 	//ウィンドウハンドルを渡してスワップチェーンを生成
-	hr = dxgiFactory->CreateSwapChainForHwnd(commandQueue, hwnd, &swapChainDesc, nullptr, nullptr,
+	hr = dxgiFactory->CreateSwapChainForHwnd(
+		commandQueue, winApp->GetHwnd(), &swapChainDesc, nullptr, nullptr,
 		reinterpret_cast<IDXGISwapChain1**>(swapChain.GetAddressOf()));
 	assert(SUCCEEDED(hr));
 
@@ -1564,7 +1565,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	IMGUI_CHECKVERSION();
 	ImGui::CreateContext();
 	ImGui::StyleColorsDark();
-	ImGui_ImplWin32_Init(hwnd);
+	ImGui_ImplWin32_Init(winApp->GetHwnd());
 	ImGui_ImplDX12_Init(device, swapChainDesc.BufferCount, rtvDesc.Format, srvDescriptorHeap.Get(), srvDescriptorHeap->GetCPUDescriptorHandleForHeapStart(), srvDescriptorHeap->GetGPUDescriptorHandleForHeapStart());
 	ImGuiIO& io = ImGui::GetIO();
 	io.Fonts->Build();
