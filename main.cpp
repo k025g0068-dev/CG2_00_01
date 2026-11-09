@@ -9,6 +9,7 @@
 #include <string>
 #include <cmath>
 #include <vector>
+#include <list>
 #include <filesystem>
 #include <fstream>
 #include <chrono>
@@ -52,6 +53,11 @@ enum BlendMode {
 	kCount0fBlendMode,//利用なし
 };
 
+enum SpecularType {
+	kSpecularTypePhong,//フォン反射
+	kSpecularTypeBlinnPhong,//ブリンフォン反射
+	kCountOfSpecularType,
+};
 
 struct VertexData {
 	Vector4 position;
@@ -62,10 +68,11 @@ struct VertexData {
 struct Material {
 	Vector4 color;
 	int32_t enableLighting;
-	float padding[3];
+	int32_t specularType;//0:Phong 1:BlinnPhong
+	float shininess;//光沢度
+	float padding;
 	Matrix4x4 uvTransform;
 };
-
 struct ParticleForrGPU {
 	Matrix4x4 WVP;
 	Matrix4x4 world;
@@ -117,7 +124,36 @@ struct Particle {
 	Vector4 color;
 	float lifeTime;
 	float currentTime;
+	bool isFire = false;
+	int blast = 0;
 };
+
+struct Emitter {
+	Transform transform;//エミッタのTransform
+	uint32_t count;//発生数
+	float frequency;//発生頻度
+	float frequencyTime;//頻度用時刻
+};
+
+struct AABB {
+	Vector3 min;
+	Vector3 max;
+};
+
+struct AccelerationField {
+	Vector3 acceleration;
+	AABB area;
+};
+
+struct CameraForGPU {
+	Vector3 worldPosition;
+};
+
+bool IsCollision(const AABB& aabb, const Vector3& point) {
+	return (aabb.min.x <= point.x && point.x <= aabb.max.x) &&
+		(aabb.min.y <= point.y && point.y <= aabb.max.y) &&
+		(aabb.min.z <= point.z && point.z <= aabb.max.z);
+}
 
 Matrix4x4 MakeIdentity4x4() {
 	Matrix4x4 result;
@@ -373,13 +409,18 @@ Transform uvTransformSprite{
 	{ 0.0f,0.0f,0.0f },
 };
 
-Particle MakeNewParticle(std::mt19937& randomEngine) {
+Particle MakeNewParticle(std::mt19937& randomEngine, const Vector3& translate) {
 	std::uniform_real_distribution<float> distribution(-1.0f, 1.0f);
 	Particle particle;
 	particle.transform.scale = { 0.3f,0.3f,0.3f };
 	particle.transform.rotate = { 0.0f,0.0f,0.0f };
 	particle.transform.translate = { distribution(randomEngine),distribution(randomEngine),distribution(randomEngine) };
 	particle.velocity = { distribution(randomEngine), distribution(randomEngine), distribution(randomEngine) };
+
+	Vector3 randomTranslate{ distribution(randomEngine),distribution(randomEngine),distribution(randomEngine) };
+	particle.transform.translate.x = translate.x + randomTranslate.x;
+	particle.transform.translate.y = translate.y + randomTranslate.y;
+	particle.transform.translate.z = translate.z + randomTranslate.z;
 
 	std::uniform_real_distribution<float>distTime(1.0f, 3.0f);
 	particle.lifeTime = distTime(randomEngine);
@@ -388,6 +429,163 @@ Particle MakeNewParticle(std::mt19937& randomEngine) {
 	std::uniform_real_distribution<float> distColor(0.0f, 1.0f);
 	particle.color = { distColor(randomEngine),distColor(randomEngine), distColor(randomEngine), 1.0f };
 	return particle;
+}
+
+Vector4 FireColor(float t) {
+	Vector4 c;
+	if (t < 0.3f) {
+		float k = t / 0.3f;
+		c = { 1.0f,1.0f - 0.5f * k,0.6f - 0.5f * k,1.0f };
+	}
+	else {
+		float k = (t - 0.3f) / 0.7f;
+		c = { 1.0f - 0.7f * k,0.5f - 0.5f * k,0.1f - 0.1f * k,1.0f };
+	}
+	return c;
+}
+
+Particle MakeFireParticle(std::mt19937& rng, const Vector3& center, float radius) {
+	std::uniform_real_distribution<float> dist01(0.0f, 1.0f);
+	std::uniform_real_distribution<float> distSigned(-1.0f, 1.0f);
+
+	float angle = dist01(rng) * 6.2831853f;
+	float r = radius * std::sqrt(dist01(rng));
+
+	Particle p;
+	p.transform.scale = { 0.4f, 0.4f, 0.4f };
+	p.transform.rotate = { 0.0f, 0.0f, 0.0f };
+	p.transform.translate = { center.x + std::cos(angle) * r, center.y, center.z + std::sin(angle) * r };
+	p.velocity = { distSigned(rng) * 0.3f, 1.5f + dist01(rng) * 1.5f, distSigned(rng) * 0.3f };  // 上向き+ゆらぎ
+	p.lifeTime = 0.8f + dist01(rng) * 0.8f;
+	p.currentTime = 0.0f;
+	p.color = { 1.0f, 1.0f, 1.0f, 1.0f };
+	p.isFire = true;
+	return p;
+}
+
+// ---------------- 爆発 ----------------
+enum BlastKind { kBlastNone, kBlastBall, kBlastSpark, kBlastRing, kBlastFlash };
+
+float Lerp1(float a, float b, float k) { return a + (b - a) * k; }
+
+// 白黄 → オレンジ → 暗い赤
+Vector4 ExplosionColor(float t) {
+	if (t < 0.15f) {
+		float k = t / 0.15f;
+		return { 1.0f, Lerp1(1.0f, 0.8f, k), Lerp1(0.8f, 0.3f, k), 1.0f };
+	}
+	else if (t < 0.5f) {
+		float k = (t - 0.15f) / 0.35f;
+		return { 1.0f, Lerp1(0.8f, 0.4f, k), Lerp1(0.3f, 0.05f, k), 1.0f };
+	}
+	float k = (t - 0.5f) / 0.5f;
+	return { Lerp1(1.0f, 0.4f, k), Lerp1(0.4f, 0.1f, k), Lerp1(0.05f, 0.02f, k), 1.0f };
+}
+
+// 爆発パーティクルの速度更新(減速・重力)
+void UpdateBlastVelocity(Particle& p, float dt) {
+	switch (p.blast) {
+	case kBlastBall: {
+		float drag = (std::max)(0.0f, 1.0f - 3.0f * dt);
+		p.velocity.x *= drag; p.velocity.y *= drag; p.velocity.z *= drag;
+		break;
+	}
+	case kBlastRing: {
+		float drag = (std::max)(0.0f, 1.0f - 2.0f * dt);
+		p.velocity.x *= drag; p.velocity.z *= drag;
+		break;
+	}
+	case kBlastSpark:
+		p.velocity.y -= 9.8f * dt;
+		break;
+	default:
+		break;
+	}
+}
+
+// 爆発パーティクルの見た目(大きさ・色・透明度)
+void ApplyBlastLook(const Particle& p, float t, Vector3& drawScale, Vector4& color, float& alpha) {
+	float s = 1.0f;
+	switch (p.blast) {
+	case kBlastBall:
+		s = 1.0f + 0.8f * t;
+		color = ExplosionColor(t);
+		break;
+	case kBlastSpark:
+		s = 1.0f - 0.7f * t;
+		color = { 1.0f, 0.9f - 0.5f * t, 0.5f - 0.4f * t, 1.0f };
+		break;
+	case kBlastRing:
+		s = 1.0f + 0.5f * t;
+		color = { 1.0f, 0.8f, 0.5f, 1.0f };
+		break;
+	case kBlastFlash:
+		s = 1.0f + 0.5f * t;
+		color = { 1.0f, 1.0f, 1.0f, 1.0f };
+		alpha = alpha * alpha;   // 急に消える
+		break;
+	default:
+		break;
+	}
+	drawScale = { drawScale.x * s, drawScale.y * s, drawScale.z * s };
+}
+
+// 爆発の生成
+void MakeExplosion(std::mt19937& rng, const Vector3& center, std::list<Particle>& out) {
+	std::uniform_real_distribution<float> d01(0.0f, 1.0f);
+	std::uniform_real_distribution<float> dSigned(-1.0f, 1.0f);
+	const float kTwoPi = 6.2831853f;
+
+	auto randomDir = [&]() {
+		float z = dSigned(rng);
+		float phi = d01(rng) * kTwoPi;
+		float r = std::sqrt(1.0f - z * z);
+		return Vector3{ r * std::cos(phi), z, r * std::sin(phi) };
+		};
+
+	auto make = [&](int kind, const Vector3& vel, float scale, float life) {
+		Particle p;
+		p.transform.scale = { scale, scale, scale };
+		p.transform.rotate = { 0.0f, 0.0f, 0.0f };
+		p.transform.translate = center;
+		p.velocity = vel;
+		p.lifeTime = life;
+		p.currentTime = 0.0f;
+		p.color = { 1.0f, 1.0f, 1.0f, 1.0f };
+		p.blast = kind;
+		out.push_back(p);
+		};
+
+	// 閃光コア
+	make(kBlastFlash, { 0.0f, 0.0f, 0.0f }, 3.0f, 0.15f);
+
+	// 火の玉
+	for (int i = 0; i < 40; ++i) {
+		Vector3 d = randomDir();
+		float speed = 2.0f + d01(rng) * 4.0f;
+		make(kBlastBall, { d.x * speed, d.y * speed, d.z * speed }, 0.6f + d01(rng) * 0.6f, 0.6f + d01(rng) * 0.6f);
+	}
+
+	// 火花
+	for (int i = 0; i < 60; ++i) {
+		Vector3 d = randomDir();
+		float speed = 6.0f + d01(rng) * 8.0f;
+		make(kBlastSpark, { d.x * speed, d.y * speed, d.z * speed }, 0.08f + d01(rng) * 0.07f, 0.8f + d01(rng) * 0.8f);
+	}
+
+	// 衝撃波リング
+	for (int i = 0; i < 36; ++i) {
+		float a = kTwoPi * i / 36.0f;
+		make(kBlastRing, { std::cos(a) * 9.0f, 0.0f, std::sin(a) * 9.0f }, 0.25f, 0.5f);
+	}
+}
+
+std::list<Particle> Emit(const Emitter& emitter, std::mt19937& randomEngine) {
+	std::list<Particle> particles;
+	for (uint32_t count = 0; count < emitter.count; ++count) {
+		particles.push_back(MakeNewParticle(randomEngine, emitter.transform.translate));
+	}
+	return particles;
 }
 
 //現在時刻を取得
@@ -855,8 +1053,8 @@ void SoundPlayWave(IXAudio2* xAudio2, const SoundData& soundData) {
 // Windowsアプリケーションのエントリーポイント（main関数）
 int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	CoInitializeEx(0, COINIT_MULTITHREADED);
-	
-		WNDCLASS wc{};
+
+	WNDCLASS wc{};
 	//ウィンドウプロシージャの指定
 	wc.lpfnWndProc = WndProc;
 	//ウィンドウクラスの名前	
@@ -892,7 +1090,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
 	Input* input = nullptr;
 	input = new Input();
-	input->Initialize(wc.hInstance,hwnd);
+	input->Initialize(wc.hInstance, hwnd);
 	input->Update();
 
 #ifdef _DEBUG
@@ -1092,7 +1290,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 		D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
 
 	// 最初から要素数「2」の配列として正しく定義する
-	D3D12_ROOT_PARAMETER rootParameters[4] = {};
+	D3D12_ROOT_PARAMETER rootParameters[5] = {};
 
 	// 【0番】: マテリアル用 (Pixel Shader の b0 レジスタ)
 	rootParameters[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
@@ -1112,6 +1310,10 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	rootParameters[3].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
 	rootParameters[3].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
 	rootParameters[3].Descriptor.ShaderRegister = 1;
+
+	rootParameters[4].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
+	rootParameters[4].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+	rootParameters[4].Descriptor.ShaderRegister = 2;
 
 	D3D12_STATIC_SAMPLER_DESC staticSamplers[1] = {};
 	staticSamplers[0].Filter = D3D12_FILTER_MIN_MAG_MIP_LINEAR;
@@ -1359,21 +1561,23 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
 
 
-
+	//平面モデル
 	Microsoft::WRL::ComPtr<ID3D12Resource> materialResource = CreateBufferResource(device, sizeof(Material));
 	Material* materialData = nullptr;
 	materialResource->Map(0, nullptr, reinterpret_cast<void**>(&materialData));
 	materialData->color = Vector4(1.0f, 0.0f, 0.0f, 1.0f);
 	materialData->enableLighting = true;
+	materialData->specularType = 0;
+	materialData->shininess = 40.0f;
 	materialData->uvTransform = MakeIdentity4x4();
 
 
-
+	//球体
 	Microsoft::WRL::ComPtr<ID3D12Resource> directionalLightResource = CreateBufferResource(device, sizeof(DirectionalLight));
 	DirectionalLight* directionalLightData = nullptr;
 	directionalLightResource->Map(0, nullptr, reinterpret_cast<void**>(&directionalLightData));
 	directionalLightData->color = { 1.0f, 1.0f, 1.0f, 1.0f };
-	directionalLightData->direction = { 0.0f, -1.0f, 0.0f };
+	directionalLightData->direction = { 1.0f, -1.0f, 1.0f };
 	directionalLightData->intensity = 1.0f;
 
 	//球体マテリアル
@@ -1382,6 +1586,8 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	materialResourceSphere->Map(0, nullptr, reinterpret_cast<void**>(&materialDataSphere));
 	materialDataSphere->color = { 1.0f, 1.0f, 1.0f, 1.0f };
 	materialDataSphere->enableLighting = true;
+	materialDataSphere->specularType = 0;
+	materialDataSphere->shininess = 40.0f;
 	materialDataSphere->uvTransform = MakeIdentity4x4();
 
 
@@ -1491,6 +1697,12 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	wvpDataSphere->world = MakeIdentity4x4();
 
 	Transform cameraTransform{ { 1.0f,1.0f,1.0f },{ std::numbers::pi_v<float> / 3.0f,0.0f,0.0f },{ 0.0f,23.0f,-10.0f } };
+	Microsoft::WRL::ComPtr<ID3D12Resource> cameraResource =
+		CreateBufferResource(device, sizeof(CameraForGPU));
+	CameraForGPU* cameraData = nullptr;
+	cameraResource->Map(0, nullptr, reinterpret_cast<void**>(&cameraData));
+	cameraData->worldPosition = cameraTransform.translate;
+
 
 	Matrix4x4 projectionMatrix = MakePerspectiveFovMatrix(0.45f, static_cast<float>(kClientWidth) / kClientHeight, 0.1f, 100.0f);
 
@@ -1538,6 +1750,11 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	particlePsoDesc.pRootSignature = particleRootSignature;
 	particlePsoDesc.VS = { particleVSBlob->GetBufferPointer(), particleVSBlob->GetBufferSize() };
 	particlePsoDesc.PS = { particlePSBlob->GetBufferPointer(), particlePSBlob->GetBufferSize() };
+
+	particlePsoDesc.BlendState.RenderTarget[0].SrcBlend = D3D12_BLEND_SRC_ALPHA;
+	particlePsoDesc.BlendState.RenderTarget[0].DestBlend = D3D12_BLEND_ONE;       // 加算
+	particlePsoDesc.BlendState.RenderTarget[0].BlendOp = D3D12_BLEND_OP_ADD;
+	particlePsoDesc.DepthStencilState.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ZERO; // 重なりで欠けない
 
 	Microsoft::WRL::ComPtr<ID3D12PipelineState> particlePipelineState = nullptr;
 	hr = device->CreateGraphicsPipelineState(&particlePsoDesc, IID_PPV_ARGS(&particlePipelineState));
@@ -1657,10 +1874,20 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
 
 	bool useBillboard = true;
-	int cameraViewMode = 1; 
+	int cameraViewMode = 1;
 	bool useMonsterBall = true;
 	bool isParticleUpdate = true;
 	bool isParticleSpawn = false;
+
+	bool isFireActive = false;
+	Vector3 fireCenter = { 0.0f,0.0f,0.0f };
+	float fireRadius = 0.2f;
+	float fireSpreadSpeed = 0.8f;
+	float fireMaxRadius = 6.0f;
+
+	Vector3 explosionCenter = { 0.0f, 1.0f, 0.0f };
+	float explosionFlash = 0.0f;
+	float lightBaseIntensity = 1.0f;
 
 	Microsoft::WRL::ComPtr<ID3D12Resource> materialResourceParticle = CreateBufferResource(device, sizeof(Material));
 	Material* materialDataParticle = nullptr;
@@ -1698,9 +1925,9 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
 	SoundPlayWave(xAudio2.Get(), soundData1);
 
-	
 
-	const uint32_t kNumInstance = 10;
+
+	const uint32_t kNumInstance = 1024;
 
 	Microsoft::WRL::ComPtr<ID3D12Resource> instancingResource = CreateBufferResource(device, sizeof(ParticleForrGPU) * kNumInstance);
 	ParticleForrGPU* instancingData = nullptr;
@@ -1726,15 +1953,24 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	std::random_device seedGenerator;
 	std::mt19937 randomEngine(seedGenerator());
 
-	Particle particle[kNumInstance];
-	for (uint32_t index = 0; index < kNumInstance; ++index) {
-		particle[index] = MakeNewParticle(randomEngine);
-	}
+	std::list<Particle>particle;
+	particle.push_back(MakeNewParticle(randomEngine, Vector3{ 0.0f, 0.0f, 0.0f }));
+	particle.push_back(MakeNewParticle(randomEngine, Vector3{ 0.0f, 0.0f, 0.0f }));
+	particle.push_back(MakeNewParticle(randomEngine, Vector3{ 0.0f, 0.0f, 0.0f }));
 
 	DebugCamera debugCamera;
 	debugCamera.Initialize();
-	bool isDubugCameraActive = false;	
+	bool isDubugCameraActive = false;
 
+	Emitter emitter{};
+	emitter.count = 3;
+	emitter.frequency = 0.5f;
+	emitter.frequencyTime = 0.0f;
+
+	AccelerationField accelerationField;
+	accelerationField.acceleration = { 15.0f,0.0f,0.0f };
+	accelerationField.area.min = { -1.0f,-1.0f,-1.0f };
+	accelerationField.area.max = { 1.0f,1.0f,1.0f };
 
 	// windowの×ボタンが押されるまでループ
 	while (msg.message != WM_QUIT) {
@@ -1760,6 +1996,21 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
 			// α値のバー付きカラーピッカー用フラグ
 			const ImGuiColorEditFlags colorFlags = ImGuiColorEditFlags_AlphaBar | ImGuiColorEditFlags_AlphaPreviewHalf;
+
+
+			// ライティング・スペキュラ共通UI
+			const char* specularTypeNames[] = { "kSpecularTypePhong", "kSpecularTypeBlinnPhong" };
+			auto lightingUI = [&](Material* material) {
+				bool enableLighting = material->enableLighting != 0;
+				if (ImGui::Checkbox("enableLighting", &enableLighting)) {
+					material->enableLighting = enableLighting ? 1 : 0;
+				}
+				ImGui::Combo("SpecularType", &material->specularType, specularTypeNames, kCountOfSpecularType);
+				ImGui::DragFloat("Shininess", &material->shininess, 0.1f, 1.0f, 256.0f);
+				};
+			const char* blendModeNames[] = {
+				"kBlendModeNone", "kBlendModeNomral", "kBlendModeAdd",
+				"kBlendModeSubtract", "kBlendModeMultiply", "kBlendModeScreen" };
 
 			if (ImGui::CollapsingHeader("Model (plane.obj)", ImGuiTreeNodeFlags_DefaultOpen)) {
 				ImGui::PushID("model");
@@ -1791,7 +2042,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 				ImGui::PushID("particle");
 				ImGui::Checkbox("Update (move)", &isParticleUpdate);
 				ImGui::Checkbox("Spawn", &isParticleSpawn);
-				
+
 				if (ImGui::RadioButton("Front", &cameraViewMode, 0)) {
 					cameraTransform.rotate = { 0.0f, 0.0f, 0.0f };
 					cameraTransform.translate = { 0.0f, 0.0f, -15.0f };
@@ -1801,6 +2052,28 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 					cameraTransform.rotate = { std::numbers::pi_v<float> / 3.0f, 0.0f, 0.0f };
 					cameraTransform.translate = { 0.0f, 23.0f, -10.0f };
 				}
+
+				if (ImGui::Button("Add Particle")) {
+					particle.splice(particle.end(), Emit(emitter, randomEngine));
+				}
+
+				if (ImGui::Button("Ignite")) { isFireActive = true; fireRadius = 0.2f; }
+				ImGui::SameLine();
+				if (ImGui::Button("Extinguish")) { isFireActive = false; }
+				ImGui::DragFloat3("FireCenter", &fireCenter.x, 0.05f);
+				ImGui::DragFloat("SpreadSpeed", &fireSpreadSpeed, 0.01f, 0.0f, 5.0f);
+				ImGui::DragFloat("MaxRadius", &fireMaxRadius, 0.05f, 0.5f, 20.0f);
+
+				if (ImGui::Button("Explode")) {
+					if (explosionFlash <= 0.0f) {
+						lightBaseIntensity = directionalLightData->intensity;
+					}
+					MakeExplosion(randomEngine, explosionCenter, particle);
+					explosionFlash = 1.0f;
+				}
+				ImGui::DragFloat3("ExplosionCenter", &explosionCenter.x, 0.05f);
+
+				ImGui::DragFloat3("EmitterTranslate", &emitter.transform.translate.x, 0.01f, -100.0f, 100.0f);
 				ImGui::PopID();
 			}
 
@@ -1846,6 +2119,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			if (!isDubugCameraActive) {
 				cameraMatrix = MakeAffineMatrix(cameraTransform.scale, cameraTransform.rotate, cameraTransform.translate);
 				viewMatrix = Inverse(cameraMatrix);
+				cameraData->worldPosition = cameraTransform.translate;
 			}
 
 			Matrix4x4 worldMatrixSprite = MakeAffineMatrix(transformSprite.scale, transformSprite.rotate, transformSprite.translate);
@@ -1873,6 +2147,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			uvTransformMatrix = Multiply(uvTransformMatrix, MakeRotateZMatrix(uvTransformSprite.rotate.z));
 			uvTransformMatrix = Multiply(uvTransformMatrix, MakeTranslationMatrix(uvTransformSprite.translate));
 			materialDataSprite->uvTransform = uvTransformMatrix;
+			cameraData->worldPosition = debugCamera.translation_;
 
 			if (input->PushKey(DIK_SPACE)) {
 				isDubugCameraActive = !isDubugCameraActive;
@@ -1895,21 +2170,18 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 				billboardMatrix.m[3][1] = 0.0f;
 				billboardMatrix.m[3][2] = 0.0f;
 			}
-			
-			for (uint32_t index = 0; index < kNumInstance; ++index) {
-				Matrix4x4 worldMatrix = Multiply(
-					Multiply(MakeScaleMatrix(particle[index].transform.scale), billboardMatrix),
-					MakeTranslationMatrix(particle[index].transform.translate));
-				Matrix4x4 worldViewProjectionMatrix = Multiply(worldMatrix, viewProjectionMatrix);
-				instancingData[index].WVP = worldViewProjectionMatrix;
-				instancingData[index].world = worldMatrix;
-				instancingData[index].color = particle[index].color;
-			}
 
 			// 生成
 			if (isParticleSpawn) {
-				for (uint32_t index = 0; index < kNumInstance; ++index) {
-					particle[index] = MakeNewParticle(randomEngine);
+				for (std::list<Particle>::iterator particleIterator = particle.begin();
+					particleIterator != particle.end();) {
+					if ((*particleIterator).lifeTime <= (*particleIterator).currentTime) {
+						particleIterator = particle.erase(particleIterator);
+						continue;
+					}
+					++particleIterator;
+
+
 				}
 				isParticleSpawn = false;
 			}
@@ -1917,34 +2189,84 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			uint32_t numInstance = 0;
 			const float kDeltaTime = 1.0f / 60.0f;
 
-			// 移動				
-			for (uint32_t index = 0; index < kNumInstance; ++index) {
+			if (isFireActive) {
+				fireRadius = (std::min)(fireRadius + fireSpreadSpeed * kDeltaTime, fireMaxRadius);
+				uint32_t fireCount = (uint32_t)(std::min)(2.0f + fireRadius * 3.0f, 10.0f);
+				for (uint32_t i = 0; i < fireCount; ++i) {
+					particle.push_back(MakeFireParticle(randomEngine, fireCenter, fireRadius));
+				}
+			}
 
-
-				if (particle[index].lifeTime <= particle[index].currentTime) {
+			// 移動
+			for (std::list<Particle>::iterator it = particle.begin(); it != particle.end();) {
+				// 寿命が尽きたら削除
+				if (it->lifeTime <= it->currentTime) {
+					it = particle.erase(it);
 					continue;
 				}
 
-				if (isParticleUpdate) {
-
-					particle[index].transform.translate.x += particle[index].velocity.x * kDeltaTime;
-					particle[index].transform.translate.y += particle[index].velocity.y * kDeltaTime;
-					particle[index].transform.translate.z += particle[index].velocity.z * kDeltaTime;
-					particle[index].currentTime += kDeltaTime;
+				// GPUバッファの上限を超えないようにする
+				if (numInstance >= kNumInstance) {
+					break;
 				}
 
-				float alpha = 1.0f - (particle[index].currentTime / particle[index].lifeTime);
+				if (isParticleUpdate) {
+					if (IsCollision(accelerationField.area, it->transform.translate)) {
+						it->velocity.x += accelerationField.acceleration.x * kDeltaTime;
+						it->velocity.y += accelerationField.acceleration.y * kDeltaTime;
+						it->velocity.z += accelerationField.acceleration.z * kDeltaTime;
+					}
+					UpdateBlastVelocity(*it, kDeltaTime);
+					it->transform.translate.x += it->velocity.x * kDeltaTime;
+					it->transform.translate.y += it->velocity.y * kDeltaTime;
+					it->transform.translate.z += it->velocity.z * kDeltaTime;
+					it->currentTime += kDeltaTime;
+				}
 
-				Matrix4x4 worldMatrix = Multiply(
-					Multiply(MakeScaleMatrix(particle[index].transform.scale), billboardMatrix),
-					MakeTranslationMatrix(particle[index].transform.translate));
-				Matrix4x4 wvp = Multiply(worldMatrix, viewProjectionMatrix);
+				float t = it->currentTime / it->lifeTime;
+				float alpha = 1.0f - t;
+
+				Vector3 drawScale = it->transform.scale;
+				if (it->isFire) {
+					float s = 1.0f - 0.6f * t;
+					drawScale = { drawScale.x * s, drawScale.y * s, drawScale.z * s };
+				}
+
+				Vector4 blastColor = {};
+				if (it->blast != kBlastNone) {
+					ApplyBlastLook(*it, t, drawScale, blastColor, alpha);
+				}
+
+				Matrix4x4 particleWorldMatrix = Multiply(
+					Multiply(MakeScaleMatrix(drawScale), billboardMatrix),
+					MakeTranslationMatrix(it->transform.translate));
+				Matrix4x4 wvp = Multiply(particleWorldMatrix, viewProjectionMatrix);
 
 				instancingData[numInstance].WVP = wvp;
-				instancingData[numInstance].world = worldMatrix;
-				instancingData[numInstance].color = particle[index].color;
+				instancingData[numInstance].world = particleWorldMatrix;
+				instancingData[numInstance].color = it->isFire ? FireColor(t) : it->color;
+				if (it->blast != kBlastNone) {                       // 追加
+					instancingData[numInstance].color = blastColor;
+				}
 				instancingData[numInstance].color.w = alpha;
 				++numInstance;
+				++it;
+			}
+
+			if (explosionFlash > 0.0f) {
+				explosionFlash = (std::max)(0.0f, explosionFlash - kDeltaTime * 3.0f);
+				directionalLightData->intensity = lightBaseIntensity + explosionFlash * 3.0f;
+				directionalLightData->color = { 1.0f, 0.6f + 0.4f * (1.0f - explosionFlash), 0.3f + 0.7f * (1.0f - explosionFlash), 1.0f };
+				if (explosionFlash == 0.0f) {
+					directionalLightData->intensity = lightBaseIntensity;
+					directionalLightData->color = { 1.0f, 1.0f, 1.0f, 1.0f };
+				}
+			}
+
+			emitter.frequencyTime += kDeltaTime;
+			if (emitter.frequency <= emitter.frequencyTime) {
+				particle.splice(particle.end(), Emit(emitter, randomEngine));
+				emitter.frequencyTime -= emitter.frequency;
 			}
 
 
@@ -1977,6 +2299,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			commandList->RSSetScissorRects(1, &scissorRect);
 			commandList->SetGraphicsRootSignature(rootSignature);
 			commandList->SetPipelineState(graphicsPipelineState.Get());
+			commandList->SetGraphicsRootConstantBufferView(4, cameraResource->GetGPUVirtualAddress());
 
 			commandList->IASetVertexBuffers(0, 1, &vertexBufferView);
 			commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
