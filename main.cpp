@@ -125,6 +125,7 @@ struct Particle {
 	float lifeTime;
 	float currentTime;
 	bool isFire = false;
+	int blast = 0;
 };
 
 struct Emitter {
@@ -460,6 +461,123 @@ Particle MakeFireParticle(std::mt19937& rng, const Vector3& center, float radius
 	p.color = { 1.0f, 1.0f, 1.0f, 1.0f };
 	p.isFire = true;
 	return p;
+}
+
+// ---------------- 爆発 ----------------
+enum BlastKind { kBlastNone, kBlastBall, kBlastSpark, kBlastRing, kBlastFlash };
+
+float Lerp1(float a, float b, float k) { return a + (b - a) * k; }
+
+// 白黄 → オレンジ → 暗い赤
+Vector4 ExplosionColor(float t) {
+	if (t < 0.15f) {
+		float k = t / 0.15f;
+		return { 1.0f, Lerp1(1.0f, 0.8f, k), Lerp1(0.8f, 0.3f, k), 1.0f };
+	}
+	else if (t < 0.5f) {
+		float k = (t - 0.15f) / 0.35f;
+		return { 1.0f, Lerp1(0.8f, 0.4f, k), Lerp1(0.3f, 0.05f, k), 1.0f };
+	}
+	float k = (t - 0.5f) / 0.5f;
+	return { Lerp1(1.0f, 0.4f, k), Lerp1(0.4f, 0.1f, k), Lerp1(0.05f, 0.02f, k), 1.0f };
+}
+
+// 爆発パーティクルの速度更新(減速・重力)
+void UpdateBlastVelocity(Particle& p, float dt) {
+	switch (p.blast) {
+	case kBlastBall: {
+		float drag = (std::max)(0.0f, 1.0f - 3.0f * dt);
+		p.velocity.x *= drag; p.velocity.y *= drag; p.velocity.z *= drag;
+		break;
+	}
+	case kBlastRing: {
+		float drag = (std::max)(0.0f, 1.0f - 2.0f * dt);
+		p.velocity.x *= drag; p.velocity.z *= drag;
+		break;
+	}
+	case kBlastSpark:
+		p.velocity.y -= 9.8f * dt;
+		break;
+	default:
+		break;
+	}
+}
+
+// 爆発パーティクルの見た目(大きさ・色・透明度)
+void ApplyBlastLook(const Particle& p, float t, Vector3& drawScale, Vector4& color, float& alpha) {
+	float s = 1.0f;
+	switch (p.blast) {
+	case kBlastBall:
+		s = 1.0f + 0.8f * t;
+		color = ExplosionColor(t);
+		break;
+	case kBlastSpark:
+		s = 1.0f - 0.7f * t;
+		color = { 1.0f, 0.9f - 0.5f * t, 0.5f - 0.4f * t, 1.0f };
+		break;
+	case kBlastRing:
+		s = 1.0f + 0.5f * t;
+		color = { 1.0f, 0.8f, 0.5f, 1.0f };
+		break;
+	case kBlastFlash:
+		s = 1.0f + 0.5f * t;
+		color = { 1.0f, 1.0f, 1.0f, 1.0f };
+		alpha = alpha * alpha;   // 急に消える
+		break;
+	default:
+		break;
+	}
+	drawScale = { drawScale.x * s, drawScale.y * s, drawScale.z * s };
+}
+
+// 爆発の生成
+void MakeExplosion(std::mt19937& rng, const Vector3& center, std::list<Particle>& out) {
+	std::uniform_real_distribution<float> d01(0.0f, 1.0f);
+	std::uniform_real_distribution<float> dSigned(-1.0f, 1.0f);
+	const float kTwoPi = 6.2831853f;
+
+	auto randomDir = [&]() {
+		float z = dSigned(rng);
+		float phi = d01(rng) * kTwoPi;
+		float r = std::sqrt(1.0f - z * z);
+		return Vector3{ r * std::cos(phi), z, r * std::sin(phi) };
+		};
+
+	auto make = [&](int kind, const Vector3& vel, float scale, float life) {
+		Particle p;
+		p.transform.scale = { scale, scale, scale };
+		p.transform.rotate = { 0.0f, 0.0f, 0.0f };
+		p.transform.translate = center;
+		p.velocity = vel;
+		p.lifeTime = life;
+		p.currentTime = 0.0f;
+		p.color = { 1.0f, 1.0f, 1.0f, 1.0f };
+		p.blast = kind;
+		out.push_back(p);
+		};
+
+	// 閃光コア
+	make(kBlastFlash, { 0.0f, 0.0f, 0.0f }, 3.0f, 0.15f);
+
+	// 火の玉
+	for (int i = 0; i < 40; ++i) {
+		Vector3 d = randomDir();
+		float speed = 2.0f + d01(rng) * 4.0f;
+		make(kBlastBall, { d.x * speed, d.y * speed, d.z * speed }, 0.6f + d01(rng) * 0.6f, 0.6f + d01(rng) * 0.6f);
+	}
+
+	// 火花
+	for (int i = 0; i < 60; ++i) {
+		Vector3 d = randomDir();
+		float speed = 6.0f + d01(rng) * 8.0f;
+		make(kBlastSpark, { d.x * speed, d.y * speed, d.z * speed }, 0.08f + d01(rng) * 0.07f, 0.8f + d01(rng) * 0.8f);
+	}
+
+	// 衝撃波リング
+	for (int i = 0; i < 36; ++i) {
+		float a = kTwoPi * i / 36.0f;
+		make(kBlastRing, { std::cos(a) * 9.0f, 0.0f, std::sin(a) * 9.0f }, 0.25f, 0.5f);
+	}
 }
 
 std::list<Particle> Emit(const Emitter& emitter, std::mt19937& randomEngine) {
@@ -1767,6 +1885,10 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	float fireSpreadSpeed = 0.8f;
 	float fireMaxRadius = 6.0f;
 
+	Vector3 explosionCenter = { 0.0f, 1.0f, 0.0f };
+	float explosionFlash = 0.0f;
+	float lightBaseIntensity = 1.0f;
+
 	Microsoft::WRL::ComPtr<ID3D12Resource> materialResourceParticle = CreateBufferResource(device, sizeof(Material));
 	Material* materialDataParticle = nullptr;
 	materialResourceParticle->Map(0, nullptr, reinterpret_cast<void**>(&materialDataParticle));
@@ -1945,6 +2067,14 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 				ImGui::DragFloat3("FireCenter", &fireCenter.x, 0.05f);
 				ImGui::DragFloat("SpreadSpeed", &fireSpreadSpeed, 0.01f, 0.0f, 5.0f);
 				ImGui::DragFloat("MaxRadius", &fireMaxRadius, 0.05f, 0.5f, 20.0f);
+				if (ImGui::Button("Explode")) {
+					if (explosionFlash <= 0.0f) {
+						lightBaseIntensity = directionalLightData->intensity;
+					}
+					MakeExplosion(randomEngine, explosionCenter, particle);
+					explosionFlash = 1.0f;
+				}
+				ImGui::DragFloat3("ExplosionCenter", &explosionCenter.x, 0.05f);
 
 				ImGui::DragFloat3("EmitterTranslate", &emitter.transform.translate.x, 0.01f, -100.0f, 100.0f);
 				ImGui::PopID();
@@ -2089,7 +2219,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 						it->velocity.y += accelerationField.acceleration.y * kDeltaTime;
 						it->velocity.z += accelerationField.acceleration.z * kDeltaTime;
 					}
-
+					UpdateBlastVelocity(*it, kDeltaTime);  
 					it->transform.translate.x += it->velocity.x * kDeltaTime;
 					it->transform.translate.y += it->velocity.y * kDeltaTime;
 					it->transform.translate.z += it->velocity.z * kDeltaTime;
@@ -2105,6 +2235,11 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 					drawScale = { drawScale.x * s, drawScale.y * s, drawScale.z * s };
 				}
 
+				Vector4 blastColor = {};
+				if (it->blast != kBlastNone) {
+					ApplyBlastLook(*it, t, drawScale, blastColor, alpha);
+				}
+
 				Matrix4x4 particleWorldMatrix = Multiply(
 					Multiply(MakeScaleMatrix(drawScale), billboardMatrix),
 					MakeTranslationMatrix(it->transform.translate));
@@ -2113,9 +2248,22 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 				instancingData[numInstance].WVP = wvp;
 				instancingData[numInstance].world = particleWorldMatrix;
 				instancingData[numInstance].color = it->isFire ? FireColor(t) : it->color;
+				if (it->blast != kBlastNone) {                       // 追加
+					instancingData[numInstance].color = blastColor;
+				}
 				instancingData[numInstance].color.w = alpha;
 				++numInstance;				
 				++it;
+			}
+
+			if (explosionFlash > 0.0f) {
+				explosionFlash = (std::max)(0.0f, explosionFlash - kDeltaTime * 3.0f);
+				directionalLightData->intensity = lightBaseIntensity + explosionFlash * 3.0f;
+				directionalLightData->color = { 1.0f, 0.6f + 0.4f * (1.0f - explosionFlash), 0.3f + 0.7f * (1.0f - explosionFlash), 1.0f };
+				if (explosionFlash == 0.0f) {
+					directionalLightData->intensity = lightBaseIntensity;
+					directionalLightData->color = { 1.0f, 1.0f, 1.0f, 1.0f };
+				}
 			}
 
 			emitter.frequencyTime += kDeltaTime;
