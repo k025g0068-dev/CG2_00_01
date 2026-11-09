@@ -25,11 +25,10 @@ void Input::Initialize(HINSTANCE hInstance, HWND hwnd) {
 }
 
 void Input::Update() {
-	keyboard->Acquire();
-
-	keyboard->GetDeviceState(sizeof(key), key);
-
 	memcpy(keyPre, key, sizeof(key));
+
+	keyboard->Acquire();
+	keyboard->GetDeviceState(sizeof(key), key);	
 }
 
 bool Input::PushKey(BYTE keyNumber) {
@@ -41,9 +40,6 @@ bool Input::PushKey(BYTE keyNumber) {
 }
 
 bool Input::TriggerKey(BYTE keyNumber) {
-	if (keyPre[keyNumber]) {
-		return true;
-	}
-
-	return false;
+	// 前フレームは押されておらず、今フレームで押されている
+	return !keyPre[keyNumber] && key[keyNumber];
 }

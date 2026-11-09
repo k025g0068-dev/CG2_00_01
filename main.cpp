@@ -1740,13 +1740,15 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	while (msg.message != WM_QUIT) {
 		if (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE)) {
 			TranslateMessage(&msg);
-			DispatchMessage(&msg);
-					
+			DispatchMessage(&msg);								
+		}
+		else {
+			input->Update();
+
 			if (input->PushKey(DIK_0)) {
 				OutputDebugStringA("Hit 0\n");
 			}
-		}
-		else {
+
 #ifdef USE_IMGUI
 			ImGui_ImplDX12_NewFrame();
 			ImGui_ImplWin32_NewFrame();
