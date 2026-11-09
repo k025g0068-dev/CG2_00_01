@@ -1976,14 +1976,10 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	while (msg.message != WM_QUIT) {
 		if (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE)) {
 			TranslateMessage(&msg);
-			DispatchMessage(&msg);
-
-			if (input->PushKey(DIK_0)) {
-				OutputDebugStringA("Hit 0\n");
-			}
+			DispatchMessage(&msg);								
 		}
 		else {
-			input->Update();   // ← 毎フレーム、else の先頭で1回
+			input->Update();
 
 			if (input->PushKey(DIK_0)) {
 				OutputDebugStringA("Hit 0\n");
