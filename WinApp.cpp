@@ -54,3 +54,18 @@ void WinApp::Finalize() {
 	CoUninitialize();
 	CloseWindow(hwnd_);
 }
+
+bool WinApp::processMessage() {
+	MSG msg{};
+
+	if (PeekMessage(&msg, nullptr, 0, 0, PM_REMOVE)) {
+		TranslateMessage(&msg);
+		DispatchMessage(&msg);
+	}
+
+	if (msg.message == WM_QUIT) {
+		return true;
+	}
+
+	return false;
+}

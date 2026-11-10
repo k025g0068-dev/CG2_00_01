@@ -1924,10 +1924,9 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	accelerationField.area.max = { 1.0f,1.0f,1.0f };
 
 	// windowの×ボタンが押されるまでループ
-	while (msg.message != WM_QUIT) {
-		if (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE)) {
-			TranslateMessage(&msg);
-			DispatchMessage(&msg);
+	while (true) {
+		if (winApp->processMessage()) {
+			break;
 		}
 		else {
 			input->Update();
@@ -2196,7 +2195,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 				instancingData[numInstance].WVP = wvp;
 				instancingData[numInstance].world = particleWorldMatrix;
 				instancingData[numInstance].color = it->isFire ? FireColor(t) : it->color;
-				if (it->blast != kBlastNone) {                      
+				if (it->blast != kBlastNone) {
 					instancingData[numInstance].color = blastColor;
 				}
 				instancingData[numInstance].color.w = alpha;
@@ -2353,7 +2352,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			}
 		}
 	};
-	
+
 	winApp->Finalize();
 
 	DestroyWindow(hwnd);
@@ -2362,6 +2361,6 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	delete input;
 	input = nullptr;
 
-	
+
 	return 0;
 }
