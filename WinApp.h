@@ -15,6 +15,7 @@ public:
 public:
 	void Initialize();
 	void Update();
+	void Finalize();
 
 	HWND GetHwnd() const { return hwnd_; }
 	HINSTANCE GetHInstance() const { return wc_.hInstance; }
@@ -22,4 +23,7 @@ public:
 private:
 	HWND hwnd_ = nullptr;
 	WNDCLASS wc_{};
+
+	
+	
 };
