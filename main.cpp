@@ -1041,7 +1041,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
 	Input* input = nullptr;
 	input = new Input();
-	input->Initialize(winApp->GetHInstance(), hwnd);
+	input->Initialize(winApp);
 	input->Update();
 
 #ifdef _DEBUG
@@ -2354,12 +2354,14 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 		}
 	};
 	
+	winApp->Finalize();
+
 	DestroyWindow(hwnd);
 	delete winApp;
 	winApp = nullptr;
 	delete input;
 	input = nullptr;
 
-	CoUninitialize();
+	
 	return 0;
 }
