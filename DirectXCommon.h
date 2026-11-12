@@ -63,6 +63,11 @@ public:
 	/// </summary>
 	D3D12_GPU_DESCRIPTOR_HANDLE GetSRVGPUDescriptorHandle(uint32_t index);
 
+	//描画前処理
+	void PreDraw();
+	//描画後処理
+	void PostDraw();
+
 private:
 	// デバイスの生成
 	void InitializeDevice();

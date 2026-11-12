@@ -1953,6 +1953,8 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
 			// --- ここに毎フレームの描画処理を記述する ---
 
+			dxCommon->PreDraw();
+
 			ID3D12DescriptorHeap* descriptorHeaps[] = { srvDescriptorHeap };
 			commandList->SetDescriptorHeaps(1, descriptorHeaps);
 			// 1. バックバッファのインデックス取得
@@ -2022,11 +2024,12 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
 
 
-
+		
 
 #ifdef USE_IMGUI
 			ImGui_ImplDX12_RenderDrawData(ImGui::GetDrawData(), commandList);
 #endif
+			dxCommon->PostDraw();
 
 			// 5. リソースバリアを RENDER_TARGET -> PRESENT に
 			barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_RENDER_TARGET;
