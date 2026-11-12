@@ -6,6 +6,9 @@
 #include <wrl.h>
 #include <array>
 #include <cstdint>
+#include <string>
+
+#include "externals/DirectXTex/DirectXTex.h"
 
 #include "WinApp.h"
 
@@ -68,6 +71,21 @@ public:
 	//描画後処理
 	void PostDraw();
 
+	// シェーダーのコンパイル
+	Microsoft::WRL::ComPtr<IDxcBlob> CompileShader(
+		const std::wstring& filePath,
+		const wchar_t* profile);
+	
+	/// バッファリソースの生成	
+	Microsoft::WRL::ComPtr<ID3D12Resource> CreateBufferResource(size_t sizeInBytes);
+	
+	/// テクスチャデータの転送
+	void UploadTextureData(
+		const Microsoft::WRL::ComPtr<ID3D12Resource>& texture,
+		const DirectX::ScratchImage& mipImages);
+
+	/// テクスチャファイルの読み込み
+	static DirectX::ScratchImage LoadTexture(const std::string& filePath);
 private:
 	// デバイスの生成
 	void InitializeDevice();
@@ -106,6 +124,8 @@ private:
 
 	static D3D12_GPU_DESCRIPTOR_HANDLE GetGPUDescriptorHandle(
 		ID3D12DescriptorHeap* descriptorHeap, uint32_t descriptorSize, uint32_t index);
+
+	
 
 private:
 	// WinApp（借りているだけ。所有しない）

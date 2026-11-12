@@ -459,3 +459,130 @@ D3D12_CPU_DESCRIPTOR_HANDLE DirectXCommon::GetSRVCPUDescriptorHandle(uint32_t in
 D3D12_GPU_DESCRIPTOR_HANDLE DirectXCommon::GetSRVGPUDescriptorHandle(uint32_t index) {
 	return GetGPUDescriptorHandle(srvDescriptorHeap_.Get(), descriptorSizeSRV_, index);
 }
+
+// ============================================================
+// シェーダーのコンパイル
+// ============================================================
+ComPtr<IDxcBlob> DirectXCommon::CompileShader(
+	const std::wstring& filePath,
+	const wchar_t* profile) {
+
+	// 1. hlslファイルを読む
+	Logger::Log(StringUtility::ConvertString(
+		std::format(L"Begin CompileShader, path:{},profile:{}\n", filePath, profile)));
+
+	ComPtr<IDxcBlobEncoding> shaderSource;
+	HRESULT hr = dxcUtils_->LoadFile(filePath.c_str(), nullptr, &shaderSource);
+	assert(SUCCEEDED(hr));
+
+	// コンパイル対象の情報
+	DxcBuffer shaderSourceBuffer;
+	shaderSourceBuffer.Ptr = shaderSource->GetBufferPointer();
+	shaderSourceBuffer.Size = shaderSource->GetBufferSize();
+	shaderSourceBuffer.Encoding = DXC_CP_UTF8;
+
+	// 2. Compileする
+	LPCWSTR arguments[] = {
+		filePath.c_str(),
+		L"-E", L"main",   // エントリーポイント
+		L"-T", profile,   // Shader Profile
+		L"-Zi",           // デバッグ情報
+		L"-Qembed_debug",
+		L"-Od",           // 最適化無効
+		L"-Zpr"           // 行列をrow-major
+	};
+
+	ComPtr<IDxcResult> shaderResult;
+	hr = dxcCompiler_->Compile(
+		&shaderSourceBuffer,
+		arguments,
+		_countof(arguments),
+		includeHandler_.Get(),
+		IID_PPV_ARGS(&shaderResult));
+	assert(SUCCEEDED(hr));
+
+	// 3. 警告・エラー確認
+	ComPtr<IDxcBlobUtf8> shaderError;
+	shaderResult->GetOutput(DXC_OUT_ERRORS, IID_PPV_ARGS(&shaderError), nullptr);
+	if (shaderError != nullptr && shaderError->GetStringLength() != 0) {
+		Logger::Log(shaderError->GetStringPointer());
+		assert(false);
+	}
+
+	// 4. Compile結果を取得
+	ComPtr<IDxcBlob> shaderBlob;
+	hr = shaderResult->GetOutput(DXC_OUT_OBJECT, IID_PPV_ARGS(&shaderBlob), nullptr);
+	assert(SUCCEEDED(hr));
+
+	return shaderBlob;
+}
+
+// ============================================================
+// バッファリソースの生成
+// ============================================================
+ComPtr<ID3D12Resource> DirectXCommon::CreateBufferResource(size_t sizeInBytes) {
+	D3D12_HEAP_PROPERTIES uploadHeapProperties{};
+	uploadHeapProperties.Type = D3D12_HEAP_TYPE_UPLOAD;
+
+	D3D12_RESOURCE_DESC resourceDesc{};
+	resourceDesc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
+	resourceDesc.Width = sizeInBytes;
+	resourceDesc.Height = 1;
+	resourceDesc.DepthOrArraySize = 1;
+	resourceDesc.MipLevels = 1;
+	resourceDesc.SampleDesc.Count = 1;
+	resourceDesc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+
+	ComPtr<ID3D12Resource> resource;
+	HRESULT hr = device_->CreateCommittedResource(
+		&uploadHeapProperties,
+		D3D12_HEAP_FLAG_NONE,
+		&resourceDesc,
+		D3D12_RESOURCE_STATE_GENERIC_READ,
+		nullptr,
+		IID_PPV_ARGS(resource.GetAddressOf()));
+	assert(SUCCEEDED(hr));
+
+	return resource;
+}
+
+// ============================================================
+// テクスチャデータの転送
+// ============================================================
+void DirectXCommon::UploadTextureData(
+	const ComPtr<ID3D12Resource>& texture,
+	const DirectX::ScratchImage& mipImages) {
+
+	const DirectX::TexMetadata& metadata = mipImages.GetMetadata();
+	for (size_t mipLevel = 0; mipLevel < metadata.mipLevels; ++mipLevel) {
+		const DirectX::Image* img = mipImages.GetImage(mipLevel, 0, 0);
+		HRESULT hr = texture->WriteToSubresource(
+			UINT(mipLevel),
+			nullptr,
+			img->pixels,
+			UINT(img->rowPitch),
+			UINT(img->slicePitch));
+		assert(SUCCEEDED(hr));
+	}
+}
+
+// ============================================================
+// テクスチャファイルの読み込み
+// ============================================================
+DirectX::ScratchImage DirectXCommon::LoadTexture(const std::string& filePath) {
+	// テクスチャファイルを読み込んでプログラムで扱えるようにする
+	DirectX::ScratchImage image{};
+	std::wstring filePathW = StringUtility::ConvertString(filePath);
+	HRESULT hr = DirectX::LoadFromWICFile(filePathW.c_str(), DirectX::WIC_FLAGS_FORCE_SRGB, nullptr, image);
+	assert(SUCCEEDED(hr));
+
+	// ミップマップの作成
+	DirectX::ScratchImage mipImages{};
+	hr = DirectX::GenerateMipMaps(
+		image.GetImages(), image.GetImageCount(), image.GetMetadata(),
+		DirectX::TEX_FILTER_SRGB, 0, mipImages);
+	assert(SUCCEEDED(hr));
+
+	// ミップマップ付きのデータを返す
+	return mipImages;
+}
