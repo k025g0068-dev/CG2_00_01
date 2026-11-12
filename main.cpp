@@ -1002,11 +1002,12 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 		Logger::Log(reinterpret_cast<char*>(errorBlob->GetBufferPointer()));
 		assert(false);
 	}
-	ID3D12RootSignature* rootSignature = nullptr;
+	Microsoft::WRL::ComPtr<ID3D12RootSignature> rootSignature = nullptr;
 	hr = device->CreateRootSignature(0,
-		signatureBlob->GetBufferPointer(), signatureBlob->GetBufferSize(),
+		signatureBlob->GetBufferPointer(),
+		signatureBlob->GetBufferSize(),
 		IID_PPV_ARGS(&rootSignature));
-	assert(SUCCEEDED(hr));
+	
 
 	// パーティクル用のルートパラメータを作成
 	D3D12_ROOT_PARAMETER rootParametersForParticle[4] = {};
@@ -1035,9 +1036,10 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 		Logger::Log(reinterpret_cast<char*>(errorBlobForParticle->GetBufferPointer()));
 		assert(false);
 	}
-	ID3D12RootSignature* particleRootSignature = nullptr;
+	Microsoft::WRL::ComPtr<ID3D12RootSignature> particleRootSignature = nullptr;
 	hr = device->CreateRootSignature(0,
-		signatureBlobForParticle->GetBufferPointer(), signatureBlobForParticle->GetBufferSize(),
+		signatureBlobForParticle->GetBufferPointer(),
+		signatureBlobForParticle->GetBufferSize(),
 		IID_PPV_ARGS(&particleRootSignature));
 	assert(SUCCEEDED(hr));
 
@@ -1096,7 +1098,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	inputLayoutDesc.NumElements = _countof(inputElementDescs);
 
 	D3D12_GRAPHICS_PIPELINE_STATE_DESC graphicsPipelineStareDesc{};
-	graphicsPipelineStareDesc.pRootSignature = rootSignature;
+	graphicsPipelineStareDesc.pRootSignature = rootSignature.Get();
 	graphicsPipelineStareDesc.InputLayout = inputLayoutDesc;
 	Microsoft::WRL::ComPtr<IDxcBlob> vertexShaderBlob = dxCommon->CompileShader(L"Object3d.VS.hlsl", L"vs_6_0");
 	assert(vertexShaderBlob != nullptr);
@@ -1362,7 +1364,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	Microsoft::WRL::ComPtr<IDxcBlob> particlePSBlob = dxCommon->CompileShader(L"Particle.PS.hlsl", L"ps_6_0");
 
 	D3D12_GRAPHICS_PIPELINE_STATE_DESC particlePsoDesc = graphicsPipelineStareDesc; // 他の設定は流用
-	particlePsoDesc.pRootSignature = particleRootSignature;
+	particlePsoDesc.pRootSignature = particleRootSignature.Get();
 	particlePsoDesc.VS = { particleVSBlob->GetBufferPointer(), particleVSBlob->GetBufferSize() };
 	particlePsoDesc.PS = { particlePSBlob->GetBufferPointer(), particlePSBlob->GetBufferSize() };
 
@@ -1889,7 +1891,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			// --- ここに毎フレームの描画処理を記述する ---
 
 			dxCommon->PreDraw();		
-			commandList->SetGraphicsRootSignature(rootSignature);
+			commandList->SetGraphicsRootSignature(rootSignature.Get());
 			commandList->SetPipelineState(graphicsPipelineState.Get());
 			commandList->SetGraphicsRootConstantBufferView(4, cameraResource->GetGPUVirtualAddress());
 
@@ -1918,7 +1920,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			commandList->DrawInstanced(6, 1, 0, 0);
 			commandList->DrawIndexedInstanced(6, 1, 0, 0, 0);
 
-			commandList->SetGraphicsRootSignature(particleRootSignature);
+			commandList->SetGraphicsRootSignature(particleRootSignature.Get());
 			commandList->SetPipelineState(particlePipelineState.Get());
 			commandList->IASetVertexBuffers(0, 1, &vertexBufferView);
 			commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);

@@ -7,6 +7,7 @@
 #include <array>
 #include <cstdint>
 #include <string>
+#include <chrono>
 
 #include "externals/DirectXTex/DirectXTex.h"
 
@@ -111,6 +112,10 @@ private:
 	void CreateDxcCompiler();
 	// ImGuiの初期化
 	void InitializeImGui();
+	//FPS固定の初期化
+	void InitializeFixFPS();
+	//FPS固定更新
+	void UpdateFixFPS();
 
 	// ---------- 補助関数 ----------
 	Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> CreateDescriptorHeap(
@@ -173,4 +178,6 @@ private:
 	Microsoft::WRL::ComPtr<IDxcUtils> dxcUtils_;
 	Microsoft::WRL::ComPtr<IDxcCompiler3> dxcCompiler_;
 	Microsoft::WRL::ComPtr<IDxcIncludeHandler> includeHandler_;
+
+	std::chrono::steady_clock::time_point reference_;
 };
