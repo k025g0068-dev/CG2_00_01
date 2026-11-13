@@ -915,14 +915,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	// DirectXCommonが持つオブジェクトへのアクセス用（所有はしない）
 	ID3D12Device* device = dxCommon->GetDevice();
 	ID3D12GraphicsCommandList* commandList = dxCommon->GetCommandList();
-	ID3D12CommandQueue* commandQueue = dxCommon->GetCommandQueue();
-	ID3D12CommandAllocator* commandAllocator = dxCommon->GetCommandAllocator();
-	IDXGISwapChain4* swapChain = dxCommon->GetSwapChain();
 	ID3D12DescriptorHeap* srvDescriptorHeap = dxCommon->GetSrvDescriptorHeap();
-	ID3D12DescriptorHeap* dsvDescriptorHeap = dxCommon->GetDsvDescriptorHeap();
-	ID3D12Fence* fence = dxCommon->GetFence();
-	uint64_t& fenceValue = dxCommon->GetFenceValue();
-	HANDLE fenceEvent = dxCommon->GetFenceEvent();	
 	HRESULT hr = S_OK;
 
 	D3D12_DESCRIPTOR_RANGE descriptorRange[1] = {};
@@ -1007,7 +1000,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 		signatureBlob->GetBufferPointer(),
 		signatureBlob->GetBufferSize(),
 		IID_PPV_ARGS(&rootSignature));
-	
+
 
 	// パーティクル用のルートパラメータを作成
 	D3D12_ROOT_PARAMETER rootParametersForParticle[4] = {};
@@ -1063,7 +1056,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	rasterizerDesc.CullMode = D3D12_CULL_MODE_BACK;
 	rasterizerDesc.FillMode = D3D12_FILL_MODE_SOLID;
 
-	
+
 
 	D3D12_INPUT_ELEMENT_DESC inputElementDesc[] = {
 	{
@@ -1254,7 +1247,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	/*ID3D12Resource* CreateBufferResource(ID3D12Device * device, size_t sizeinBytes);*/
 
 
-	
+
 	DirectX::ScratchImage mipImages = DirectXCommon::LoadTexture("resources/uvChecker.png");
 	const DirectX::TexMetadata& metadata = mipImages.GetMetadata();
 	Microsoft::WRL::ComPtr<ID3D12Resource> textureResource = CreateTextureResource(device, metadata);
@@ -1358,7 +1351,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	Microsoft::WRL::ComPtr<ID3D12PipelineState>  graphicsPipelineState = nullptr;
 	hr = device->CreateGraphicsPipelineState(&graphicsPipelineStareDesc, IID_PPV_ARGS(&graphicsPipelineState));
 	assert(SUCCEEDED(hr));
-	
+
 	//（パーティクル用）
 	Microsoft::WRL::ComPtr<IDxcBlob> particleVSBlob = dxCommon->CompileShader(L"Particle.VS.hlsl", L"vs_6_0");
 	Microsoft::WRL::ComPtr<IDxcBlob> particlePSBlob = dxCommon->CompileShader(L"Particle.PS.hlsl", L"ps_6_0");
@@ -1890,7 +1883,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
 			// --- ここに毎フレームの描画処理を記述する ---
 
-			dxCommon->PreDraw();		
+			dxCommon->PreDraw();
 			commandList->SetGraphicsRootSignature(rootSignature.Get());
 			commandList->SetPipelineState(graphicsPipelineState.Get());
 			commandList->SetGraphicsRootConstantBufferView(4, cameraResource->GetGPUVirtualAddress());
@@ -1936,12 +1929,12 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
 
 
-		
+
 
 #ifdef USE_IMGUI
 			ImGui_ImplDX12_RenderDrawData(ImGui::GetDrawData(), commandList);
 #endif
-			dxCommon->PostDraw();						
+			dxCommon->PostDraw();
 		}
 	}
 
