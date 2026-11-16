@@ -2,7 +2,7 @@
 #include <cmath>
 #include <algorithm>
 #include <Windows.h> 
-#include"Math.h"
+#include "MyMath.h"
 
 // ---------------- ヘルパー関数 ----------------
 

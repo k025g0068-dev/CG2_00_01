@@ -1,7 +1,7 @@
 #define _USE_MATH_DEFINES
 #define DIRECTINPUT_VERSION 0x0800
 #include "DebugCamera.h"
-#include "Math.h"
+#include "MyMath.h"
 #include "Input.h"
 #include "WinApp.h"
 #include "DirectXCommon.h"
@@ -31,12 +31,12 @@
 #include <xaudio2.h>
 #include <dinput.h>
 #include <numbers>
-#include "externals/DirectXTex/DirectXTex.h"
+
 
 #ifdef USE_IMGUI
-#include "externals/imugi/imgui.h"
-#include "externals/imugi/imgui_impl_dx12.h"
-#include "externals/imugi/imgui_impl_win32.h"
+#include "imgui.h"
+#include "imgui_impl_dx12.h"
+#include "imgui_impl_win32.h"
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hwnd, UINT msg, WPARAM wPram, LPARAM lPram);
 #endif
 
@@ -1093,9 +1093,9 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	D3D12_GRAPHICS_PIPELINE_STATE_DESC graphicsPipelineStareDesc{};
 	graphicsPipelineStareDesc.pRootSignature = rootSignature.Get();
 	graphicsPipelineStareDesc.InputLayout = inputLayoutDesc;
-	Microsoft::WRL::ComPtr<IDxcBlob> vertexShaderBlob = dxCommon->CompileShader(L"Object3d.VS.hlsl", L"vs_6_0");
+	Microsoft::WRL::ComPtr<IDxcBlob> vertexShaderBlob = dxCommon->CompileShader(L"resources/shaders/Object3d.VS.hlsl", L"vs_6_0");
 	assert(vertexShaderBlob != nullptr);
-	Microsoft::WRL::ComPtr<IDxcBlob> pixelShaderBlob = dxCommon->CompileShader(L"Object3d.PS.hlsl", L"ps_6_0");
+	Microsoft::WRL::ComPtr<IDxcBlob> pixelShaderBlob = dxCommon->CompileShader(L"resources/shaders/Object3d.PS.hlsl", L"ps_6_0");
 	assert(pixelShaderBlob != nullptr);
 
 	graphicsPipelineStareDesc.VS = { vertexShaderBlob->GetBufferPointer(), vertexShaderBlob->GetBufferSize() };
@@ -1353,8 +1353,8 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	assert(SUCCEEDED(hr));
 
 	//（パーティクル用）
-	Microsoft::WRL::ComPtr<IDxcBlob> particleVSBlob = dxCommon->CompileShader(L"Particle.VS.hlsl", L"vs_6_0");
-	Microsoft::WRL::ComPtr<IDxcBlob> particlePSBlob = dxCommon->CompileShader(L"Particle.PS.hlsl", L"ps_6_0");
+	Microsoft::WRL::ComPtr<IDxcBlob> particleVSBlob = dxCommon->CompileShader(L"resources/shaders/Particle.VS.hlsl", L"vs_6_0");
+	Microsoft::WRL::ComPtr<IDxcBlob> particlePSBlob = dxCommon->CompileShader(L"resources/shaders/Particle.PS.hlsl", L"ps_6_0");
 
 	D3D12_GRAPHICS_PIPELINE_STATE_DESC particlePsoDesc = graphicsPipelineStareDesc; // 他の設定は流用
 	particlePsoDesc.pRootSignature = particleRootSignature.Get();

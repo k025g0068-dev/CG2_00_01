@@ -9,7 +9,7 @@
 #include <string>
 #include <chrono>
 
-#include "externals/DirectXTex/DirectXTex.h"
+#include "DirectXTex.h" 
 
 #include "WinApp.h"
 

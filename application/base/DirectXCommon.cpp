@@ -8,10 +8,12 @@
 #include <thread>
 
 #ifdef USE_IMGUI
-#include "externals/imugi/imgui.h"
-#include "externals/imugi/imgui_impl_dx12.h"
-#include "externals/imugi/imgui_impl_win32.h"
+#include "imgui.h"
+#include "imgui_impl_dx12.h"
+#include "imgui_impl_win32.h"
 #endif
+
+#include "DirectXTex.h" 
 
 #pragma comment(lib,"dxcompiler.lib")
 #pragma comment(lib,"dxguid.lib")
