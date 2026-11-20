@@ -84,6 +84,12 @@ struct ParticleForrGPU {
 	Vector4 color;
 };
 
+struct TransformationMatrix {
+	Matrix4x4 WVP;
+	Matrix4x4 World;
+	Matrix4x4 WorldInverseTranspose;
+};
+
 struct DirectionalLight {
 	Vector4 color;
 	Vector3 direction;
@@ -982,10 +988,11 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
 	Microsoft::WRL::ComPtr<ID3D12Resource> wvpResource = CreateBufferResource(device, sizeof(ParticleForrGPU));
 
-	ParticleForrGPU* wvpData = nullptr;
+	TransformationMatrix* wvpData = nullptr;
 	wvpResource->Map(0, nullptr, reinterpret_cast<void**>(&wvpData));
 	wvpData->WVP = MakeIdentity4x4();
-	wvpData->world = MakeIdentity4x4();
+	wvpData->World = MakeIdentity4x4();
+	wvpData->WorldInverseTranspose = MakeIdentity4x4();
 
 	Microsoft::WRL::ComPtr<ID3DBlob>signatureBlob = nullptr;
 	Microsoft::WRL::ComPtr<ID3DBlob>errorBlob = nullptr;
@@ -1318,11 +1325,12 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	// モデルと重ならないように少し横（x方向）にずらして配置
 	Transform transformSphere{ { 1.0f,1.0f,1.0f },{ 0.0f,0.0f,0.0f },{ 2.5f,0.0f,0.0f } };
 
-	Microsoft::WRL::ComPtr<ID3D12Resource> wvpResourceSphere = CreateBufferResource(device, sizeof(ParticleForrGPU));
-	ParticleForrGPU* wvpDataSphere = nullptr;
+	Microsoft::WRL::ComPtr<ID3D12Resource> wvpResourceSphere = CreateBufferResource(device, sizeof(TransformationMatrix));
+	TransformationMatrix* wvpDataSphere = nullptr;
 	wvpResourceSphere->Map(0, nullptr, reinterpret_cast<void**>(&wvpDataSphere));
 	wvpDataSphere->WVP = MakeIdentity4x4();
-	wvpDataSphere->world = MakeIdentity4x4();
+	wvpDataSphere->World = MakeIdentity4x4();
+	wvpDataSphere->WorldInverseTranspose = MakeIdentity4x4();
 
 	Transform cameraTransform{ { 1.0f,1.0f,1.0f },{ std::numbers::pi_v<float> / 3.0f,0.0f,0.0f },{ 0.0f,23.0f,-10.0f } };
 	Microsoft::WRL::ComPtr<ID3D12Resource> cameraResource =
@@ -1744,13 +1752,13 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			// 2. WVP行列の合成と定数バッファへの転送
 			Matrix4x4 worldViewProjectionMatrix = Multiply(worldMatrix, Multiply(viewMatrix, projectionMatrix));
 			wvpData->WVP = worldViewProjectionMatrix;
-			wvpData->world = worldMatrix;
+			wvpData->World = worldMatrix;
 
 			// viewMatrix・projectionMatrixはモデルと共通のカメラを使う
 			Matrix4x4 worldMatrixSphere = MakeAffineMatrix(transformSphere.scale, transformSphere.rotate, transformSphere.translate);
 			Matrix4x4 worldViewProjectionMatrixSphere = Multiply(worldMatrixSphere, Multiply(viewMatrix, projectionMatrix));
 			wvpDataSphere->WVP = worldViewProjectionMatrixSphere;
-			wvpDataSphere->world = worldMatrixSphere;
+			wvpDataSphere->World = worldMatrixSphere;
 
 			Matrix4x4 uvTransformMatrix = MakeScaleMatrix(uvTransformSprite.scale);
 			uvTransformMatrix = Multiply(uvTransformMatrix, MakeRotateZMatrix(uvTransformSprite.rotate.z));

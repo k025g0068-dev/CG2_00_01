@@ -3,23 +3,23 @@
 
 struct pixelShaderOutput
 {
-    float32_t4 color : SV_TARGET0;
+    float4 color : SV_TARGET0;
 };
 
 struct Material
 {
-    float32_t4 color;
-    int32_t enableLighting;
-    int32_t specularType;
-    float32_t shininess;
-    float32_t padding;
-    float32_t4x4 uvTransform;
+    float4 color;
+    int enableLighting;
+    int specularType;
+    float shininess;
+    float padding;
+    float4x4 uvTransform;
 };
 
 struct DirectionalLight
 {
-    float32_t4 color;
-    float32_t3 direction;
+    float4 color;
+    float3 direction;
     float intensity;
 };
 
@@ -31,7 +31,7 @@ struct Camera
 ConstantBuffer<Material> gMaterial : register(b0);
 ConstantBuffer<DirectionalLight> gDirectionalLight : register(b1);
 ConstantBuffer<Camera> gCamera : register(b2);
-Texture2D<float32_t4> gTexture : register(t0);
+Texture2D<float4> gTexture : register(t0);
 SamplerState gSampler : register(s0);
 
 
