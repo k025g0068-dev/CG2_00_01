@@ -175,6 +175,7 @@ copy "$(WindowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxil.dll" "$(TargetDir)dx
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="application\base\D3DResourceLeakChecker.h" />
+    <ClInclude Include="application\base\MyMath.h" />
     <ClInclude Include="engine\debug\DebugCamera.h" />
     <ClInclude Include="application\base\DirectXCommon.h" />
     <ClInclude Include="engine\io\Input.h" />
@@ -187,7 +188,6 @@ copy "$(WindowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxil.dll" "$(TargetDir)dx
     <ClInclude Include="externals\imugi\imstb_textedit.h" />
     <ClInclude Include="externals\imugi\imstb_truetype.h" />
     <ClInclude Include="application\base\Logger.h" />
-    <ClInclude Include="application\base\Math.h" />
     <ClInclude Include="application\base\StringUtility.h" />
     <ClInclude Include="application\base\WinApp.h" />
   </ItemGroup>

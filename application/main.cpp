@@ -96,6 +96,12 @@ struct DirectionalLight {
 	float intensity;
 };
 
+struct PointLight {
+	Vector4 color;
+	Vector3 position;
+	float intensity;
+};
+
 struct MaterialData {
 	std::string textureFilePath;
 };
@@ -164,6 +170,14 @@ bool IsCollision(const AABB& aabb, const Vector3& point) {
 	return (aabb.min.x <= point.x && point.x <= aabb.max.x) &&
 		(aabb.min.y <= point.y && point.y <= aabb.max.y) &&
 		(aabb.min.z <= point.z && point.z <= aabb.max.z);
+}
+
+Matrix4x4 Transpose(const Matrix4x4& m) {
+	Matrix4x4 r;
+	for (int i = 0; i < 4; ++i)
+		for (int j = 0; j < 4; ++j)
+			r.m[i][j] = m.m[j][i];
+	return r;
 }
 
 Matrix4x4 MakeIdentity4x4() {
@@ -943,7 +957,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 		D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
 
 	// 最初から要素数「2」の配列として正しく定義する
-	D3D12_ROOT_PARAMETER rootParameters[5] = {};
+	D3D12_ROOT_PARAMETER rootParameters[6] = {};
 
 	// 【0番】: マテリアル用 (Pixel Shader の b0 レジスタ)
 	rootParameters[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
@@ -967,6 +981,10 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	rootParameters[4].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
 	rootParameters[4].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
 	rootParameters[4].Descriptor.ShaderRegister = 2;
+
+	rootParameters[5].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
+	rootParameters[5].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+	rootParameters[5].Descriptor.ShaderRegister = 3;   
 
 	D3D12_STATIC_SAMPLER_DESC staticSamplers[1] = {};
 	staticSamplers[0].Filter = D3D12_FILTER_MIN_MAG_MIP_LINEAR;
@@ -1197,6 +1215,54 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	vertexResource->Map(0, nullptr, reinterpret_cast<void**>(&vertexData));//書き込むためのアドレスを取得
 	std::memcpy(vertexData, modelData.vertices.data(), sizeof(VertexData) * modelData.vertices.size());//頂点データをリソースにコピー
 
+	const uint32_t descriptorSizeSRV = device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+	const uint32_t descriptorSizeRTV = device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
+	const uint32_t descriptorSizeDSV = device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_DSV);
+
+	//terrain
+	ModelData modelData2 = LoadObjFile("resources", "terrain.obj");
+	Microsoft::WRL::ComPtr<ID3D12Resource>vertexResource2 = CreateBufferResource(device, sizeof(VertexData) * modelData2.vertices.size());
+	D3D12_VERTEX_BUFFER_VIEW vertexBufferView2{};
+	vertexBufferView2.BufferLocation = vertexResource2->GetGPUVirtualAddress();
+	vertexBufferView2.SizeInBytes = UINT(sizeof(VertexData) * modelData2.vertices.size());
+	vertexBufferView2.StrideInBytes = sizeof(VertexData);
+	VertexData* vertexData2 = nullptr;
+	vertexResource2->Map(0, nullptr, reinterpret_cast<void**>(&vertexData2));
+	std::memcpy(vertexData2, modelData2.vertices.data(), sizeof(VertexData) * modelData2.vertices.size());
+
+	DirectX::ScratchImage mipImages3 = DirectXCommon::LoadTexture(modelData2.material.textureFilePath);
+	const DirectX::TexMetadata& metadata3 = mipImages3.GetMetadata();
+	Microsoft::WRL::ComPtr<ID3D12Resource> textureResource3 = CreateTextureResource(device, metadata3);
+	dxCommon->UploadTextureData(textureResource3, mipImages3);
+
+	D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc3{};
+	srvDesc3.Format = metadata3.format;
+	srvDesc3.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+	srvDesc3.ViewDimension= D3D12_SRV_DIMENSION_TEXTURE2D;
+	srvDesc3.Texture2D.MipLevels = UINT(metadata3.mipLevels);
+	device->CreateShaderResourceView(textureResource3.Get(), &srvDesc3,
+		GetCPUDescriptorHandle(srvDescriptorHeap, descriptorSizeSRV, 5));
+	D3D12_GPU_DESCRIPTOR_HANDLE textureSrvHandleGPU3 =
+		GetGPUDescriptorHandle(srvDescriptorHeap, descriptorSizeSRV, 5);
+
+	// Material
+	Microsoft::WRL::ComPtr<ID3D12Resource> materialResource2 = CreateBufferResource(device, sizeof(Material));
+	Material* materialData2 = nullptr;
+	materialResource2->Map(0, nullptr, reinterpret_cast<void**>(&materialData2));
+	materialData2->color = { 1.0f, 1.0f, 1.0f, 1.0f };
+	materialData2->enableLighting = true;
+	materialData2->specularType = 0;
+	materialData2->shininess = 40.0f;
+	materialData2->uvTransform = MakeIdentity4x4();
+
+	// TransformationMatrix
+	Transform transform2{ { 1.0f,1.0f,1.0f },{ 0.0f,0.0f,0.0f },{ -2.5f,2.0f,0.0f } };
+	Microsoft::WRL::ComPtr<ID3D12Resource> wvpResource2 = CreateBufferResource(device, sizeof(TransformationMatrix));
+	TransformationMatrix* wvpData2 = nullptr;
+	wvpResource2->Map(0, nullptr, reinterpret_cast<void**>(&wvpData2));
+	wvpData2->WVP = MakeIdentity4x4();
+	wvpData2->World = MakeIdentity4x4();
+	wvpData2->WorldInverseTranspose = MakeIdentity4x4();
 
 	//vertexResource->Map(0, nullptr, reinterpret_cast<void**>(&vertexData));
 	////左下
@@ -1231,6 +1297,13 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	materialData->uvTransform = MakeIdentity4x4();
 
 
+	Microsoft::WRL::ComPtr<ID3D12Resource> pointLightResource = CreateBufferResource(device, sizeof(PointLight));
+	PointLight* pointLightData = nullptr;
+	pointLightResource->Map(0, nullptr, reinterpret_cast<void**>(&pointLightData));
+	pointLightData->color = { 1.0f, 1.0f, 1.0f, 1.0f };
+	pointLightData->position = { 0.0f, 2.0f, 0.0f };
+	pointLightData->intensity = 1.0f;
+
 	//球体
 	Microsoft::WRL::ComPtr<ID3D12Resource> directionalLightResource = CreateBufferResource(device, sizeof(DirectionalLight));
 	DirectionalLight* directionalLightData = nullptr;
@@ -1238,6 +1311,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	directionalLightData->color = { 1.0f, 1.0f, 1.0f, 1.0f };
 	directionalLightData->direction = { 1.0f, -1.0f, 1.0f };
 	directionalLightData->intensity = 1.0f;
+
 
 	//球体マテリアル
 	Microsoft::WRL::ComPtr<ID3D12Resource> materialResourceSphere = CreateBufferResource(device, sizeof(Material));
@@ -1288,9 +1362,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	srvDesc2.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
 	srvDesc2.Texture2D.MipLevels = UINT(metadata2.mipLevels);
 
-	const uint32_t descriptorSizeSRV = device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
-	const uint32_t descriptorSizeRTV = device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
-	const uint32_t descriptorSizeDSV = device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_DSV);
+	
 
 	//particle描画
 	DirectX::ScratchImage mipImagesParticle = DirectXCommon::LoadTexture("resources/circle.png");
@@ -1707,6 +1779,21 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 				ImGui::PopID();
 			}
 
+			if (ImGui::CollapsingHeader("Point Light")) {
+				ImGui::PushID("pointLight");
+				ImGui::DragFloat3("position", &pointLightData->position.x, 0.05f);
+				ImGui::DragFloat("intensity", &pointLightData->intensity, 0.01f);
+				ImGui::ColorEdit4("color", &pointLightData->color.x, colorFlags);
+				ImGui::PopID();
+			}
+
+			if (ImGui::CollapsingHeader("Terrain")) {
+				ImGui::PushID("terrain");
+				ImGui::DragFloat3("translate", &transform2.translate.x, 0.05f);
+				ImGui::DragFloat3("scale", &transform2.scale.x, 0.01f);
+				ImGui::PopID();
+			}
+
 			if (ImGui::CollapsingHeader("Directional Light")) {
 				ImGui::PushID("light");
 				ImGui::ColorEdit4("color", &directionalLightData->color.x, colorFlags);
@@ -1759,6 +1846,12 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			Matrix4x4 worldViewProjectionMatrixSphere = Multiply(worldMatrixSphere, Multiply(viewMatrix, projectionMatrix));
 			wvpDataSphere->WVP = worldViewProjectionMatrixSphere;
 			wvpDataSphere->World = worldMatrixSphere;
+
+			//terrain
+			Matrix4x4 worldMatrix2 = MakeAffineMatrix(transform2.scale, transform2.rotate, transform2.translate);
+			wvpData2->WVP = Multiply(worldMatrix2, Multiply(viewMatrix, projectionMatrix));
+			wvpData2->World = worldMatrix2;
+			wvpData2->WorldInverseTranspose = Transpose(Inverse(worldMatrix2));
 
 			Matrix4x4 uvTransformMatrix = MakeScaleMatrix(uvTransformSprite.scale);
 			uvTransformMatrix = Multiply(uvTransformMatrix, MakeRotateZMatrix(uvTransformSprite.rotate.z));
@@ -1895,6 +1988,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			commandList->SetGraphicsRootSignature(rootSignature.Get());
 			commandList->SetPipelineState(graphicsPipelineState.Get());
 			commandList->SetGraphicsRootConstantBufferView(4, cameraResource->GetGPUVirtualAddress());
+			commandList->SetGraphicsRootConstantBufferView(5, pointLightResource->GetGPUVirtualAddress());
 
 			commandList->IASetVertexBuffers(0, 1, &vertexBufferView);
 			commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
@@ -1921,6 +2015,14 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			commandList->DrawInstanced(6, 1, 0, 0);
 			commandList->DrawIndexedInstanced(6, 1, 0, 0, 0);
 
+			//terrain
+			commandList->SetGraphicsRootConstantBufferView(0, materialResource2->GetGPUVirtualAddress());
+			commandList->SetGraphicsRootConstantBufferView(1, wvpResource2->GetGPUVirtualAddress());
+			commandList->SetGraphicsRootDescriptorTable(2, textureSrvHandleGPU3);
+			commandList->IASetVertexBuffers(0, 1, &vertexBufferView2);
+			commandList->DrawInstanced(UINT(modelData2.vertices.size()), 1, 0, 0);
+
+			//particle
 			commandList->SetGraphicsRootSignature(particleRootSignature.Get());
 			commandList->SetPipelineState(particlePipelineState.Get());
 			commandList->IASetVertexBuffers(0, 1, &vertexBufferView);
@@ -1930,6 +2032,8 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			commandList->SetGraphicsRootDescriptorTable(1, instancingSrvHandleGPU);
 			commandList->SetGraphicsRootDescriptorTable(2, textureSrvHandleGPUParticle);
 			commandList->SetGraphicsRootConstantBufferView(3, directionalLightResource->GetGPUVirtualAddress());
+
+			
 
 			if (numInstance > 0) {
 				commandList->DrawInstanced(UINT(modelData.vertices.size()), numInstance, 0, 0);
